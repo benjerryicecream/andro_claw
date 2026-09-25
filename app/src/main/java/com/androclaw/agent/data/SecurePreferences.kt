@@ -76,7 +76,7 @@ class SecurePreferences(context: Context) {
 
     // --- Non-sensitive settings ---
     var maxSteps: Int
-        get() = securePrefs.getInt(KEY_MAX_STEPS, 25)
+        get() = securePrefs.getInt(KEY_MAX_STEPS, 15)
         set(value) = securePrefs.edit().putInt(KEY_MAX_STEPS, value).apply()
 
     var debugMode: Boolean
@@ -142,6 +142,19 @@ class SecurePreferences(context: Context) {
         get() = securePrefs.getString(KEY_LAYA_SERVER_URL, DEFAULT_LAYA_SERVER_URL) ?: DEFAULT_LAYA_SERVER_URL
         set(value) = securePrefs.edit().putString(KEY_LAYA_SERVER_URL, value).apply()
 
+    // --- Chat watch mode ---
+    var isWatchingChat: Boolean
+        get() = securePrefs.getBoolean(KEY_WATCHING_CHAT, false)
+        set(value) = securePrefs.edit().putBoolean(KEY_WATCHING_CHAT, value).apply()
+
+    var watchPollSeconds: Int
+        get() = securePrefs.getInt(KEY_WATCH_POLL_SECONDS, DEFAULT_WATCH_POLL_SECONDS)
+        set(value) = securePrefs.edit().putInt(KEY_WATCH_POLL_SECONDS, value.coerceIn(MIN_WATCH_POLL_SECONDS, MAX_WATCH_POLL_SECONDS)).apply()
+
+    var watchReplyCount: Int
+        get() = securePrefs.getInt(KEY_WATCH_REPLY_COUNT, 0)
+        set(value) = securePrefs.edit().putInt(KEY_WATCH_REPLY_COUNT, value.coerceAtLeast(0)).apply()
+
     companion object {
         private const val KEY_PROVIDER = "provider"
         private const val KEY_OPENAI_KEY = "openai_key"
@@ -169,10 +182,17 @@ class SecurePreferences(context: Context) {
         private const val KEY_SHOW_FLOATING_OVERLAY = "show_floating_overlay"
         private const val KEY_DECISION_BACKEND = "decision_backend"
         private const val KEY_LAYA_SERVER_URL = "laya_server_url"
+        private const val KEY_WATCHING_CHAT = "watching_chat"
+        private const val KEY_WATCH_POLL_SECONDS = "watch_poll_seconds"
+        private const val KEY_WATCH_REPLY_COUNT = "watch_reply_count"
 
         const val DECISION_BACKEND_OFF = "off"
         const val DECISION_BACKEND_LAYA = "laya"
         const val DEFAULT_LAYA_SERVER_URL = "http://127.0.0.1:7710"
+
+        const val DEFAULT_WATCH_POLL_SECONDS = 20
+        const val MIN_WATCH_POLL_SECONDS = 5
+        const val MAX_WATCH_POLL_SECONDS = 120
 
         val DEFAULT_BLOCKLIST = setOf(
             "com.androclaw.agent",

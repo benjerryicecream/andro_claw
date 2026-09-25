@@ -13,7 +13,9 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -30,12 +32,14 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.androclaw.agent.agent.AgentState
+import com.androclaw.agent.data.CommandHistoryEntry
 import com.androclaw.agent.data.TaskEntity
 import com.androclaw.agent.data.TaskStatus
 import com.androclaw.agent.safety.ConfirmationRequest
@@ -47,12 +51,12 @@ import java.util.Locale
 @Composable
 fun ChatScreen(
     onNavigateToSettings: () -> Unit,
-    onNavigateToHistory: () -> Unit,
     viewModel: ChatViewModel = viewModel()
 ) {
     val context = LocalContext.current
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     var showSaveRoutineDialog by remember { mutableStateOf(false) }
+    var showCommandHistory by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         viewModel.bindService(context)
@@ -92,6 +96,18 @@ fun ChatScreen(
         )
     }
 
+    if (showCommandHistory) {
+        CommandHistorySheet(
+            commands = uiState.recentCommands,
+            onSelect = { command ->
+                showCommandHistory = false
+                viewModel.resubmit(context, command)
+            },
+            onDelete = { timestampMs -> viewModel.deleteRecentCommand(context, timestampMs) },
+            onDismiss = { showCommandHistory = false }
+        )
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -107,8 +123,8 @@ fun ChatScreen(
                     }
                 },
                 actions = {
-                    IconButton(onClick = onNavigateToHistory) {
-                        Icon(Icons.Default.History, "History")
+                    IconButton(onClick = { showCommandHistory = true }) {
+                        Icon(Icons.Default.Schedule, "Recent Commands")
                     }
                     IconButton(onClick = onNavigateToSettings) {
                         Icon(Icons.Default.Settings, "Settings")
@@ -337,6 +353,16 @@ fun AgentStateCard(
                     )
                 }
 
+                // User-facing questions (e.g. "text <name>" with an unknown recipient)
+                if (state is AgentState.WaitingForConfirmation && state.question.isNotBlank()) {
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        state.question,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+
                 // Step narrations
                 val steps = when (state) {
                     is AgentState.Executing -> state.steps
@@ -443,6 +469,90 @@ fun TaskHistoryCard(task: TaskEntity) {
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
+@Composable
+fun CommandHistorySheet(
+    commands: List<CommandHistoryEntry>,
+    onSelect: (String) -> Unit,
+    onDelete: (Long) -> Unit,
+    onDismiss: () -> Unit
+) {
+    ModalBottomSheet(onDismissRequest = onDismiss) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 24.dp)
+        ) {
+            Text(
+                "Recent Commands",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 4.dp)
+            )
+            Text(
+                "Tap to run, long-press to delete",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(start = 20.dp, end = 20.dp)
+            )
+            Spacer(Modifier.height(8.dp))
+            if (commands.isEmpty()) {
+                Text(
+                    "No commands yet",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(24.dp),
+                    textAlign = TextAlign.Center
+                )
+            } else {
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 360.dp)
+                ) {
+                    items(commands, key = { it.timestampMs }) { entry ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .combinedClickable(
+                                    onClick = { onSelect(entry.command) },
+                                    onLongClick = { onDelete(entry.timestampMs) }
+                                )
+                                .padding(horizontal = 20.dp, vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                Icons.Default.History,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(Modifier.width(12.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    entry.command,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.Medium,
+                                    maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                Text(
+                                    SimpleDateFormat("MMM d, h:mm a", Locale.getDefault())
+                                        .format(Date(entry.timestampMs)),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    }
+                }
             }
         }
     }

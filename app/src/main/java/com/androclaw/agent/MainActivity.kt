@@ -50,8 +50,7 @@ class MainActivity : ComponentActivity() {
                         }
                         composable("chat") {
                             ChatScreen(
-                                onNavigateToSettings = { navController.navigate("settings") },
-                                onNavigateToHistory = { /* history shown inline */ }
+                                onNavigateToSettings = { navController.navigate("settings") }
                             )
                         }
                         composable("settings") {

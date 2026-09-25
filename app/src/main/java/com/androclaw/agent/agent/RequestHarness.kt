@@ -68,7 +68,7 @@ object RequestHarness {
         return ParsedIntent.GeneralTask(trimmed)
     }
 
-    private fun formatUrl(raw: String): String {
+    internal fun formatUrl(raw: String): String {
         var url = raw.trim()
         if (!url.startsWith("http://") && !url.startsWith("https://")) {
             url = "https://$url"

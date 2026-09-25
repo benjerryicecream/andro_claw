@@ -39,6 +39,30 @@ class TrainingLogger(private val dir: File) {
         logFile.appendText(entry.toString() + "\n")
     }
 
+    /**
+     * Tag a whole task trajectory as a failure (thrash stop, max-steps cap,
+     * quota exhaustion) so the future model doesn't learn to imitate the pacing
+     * that led there. Kept alongside [logDecision] in the same training file.
+     */
+    @Synchronized
+    fun logFailure(
+        taskId: String,
+        outcome: String,
+        goal: String,
+        tried: String,
+        source: String
+    ) {
+        val entry = JSONObject()
+            .put("ts", System.currentTimeMillis())
+            .put("taskId", taskId)
+            .put("kind", "trajectory_failure")
+            .put("outcome", outcome)
+            .put("goal", goal.take(200))
+            .put("tried", tried.take(stateCap))
+            .put("source", source)
+        logFile.appendText(entry.toString() + "\n")
+    }
+
     companion object {
         const val LOG_FILE_NAME = "laya_training.jsonl"
 

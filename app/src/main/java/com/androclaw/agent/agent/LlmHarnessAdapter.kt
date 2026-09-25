@@ -2,6 +2,7 @@ package com.androclaw.agent.agent
 
 import com.androclaw.agent.llm.LlmMessage
 import com.androclaw.agent.llm.LlmProvider
+import com.androclaw.agent.llm.LlmResilience
 import com.androclaw.agent.llm.LlmResponse as ProviderLlmResponse
 
 /** Thrown when the underlying LLM provider returns an error during a harness call. */
@@ -21,7 +22,13 @@ class LlmHarnessAdapter(
 
     suspend fun complete(messages: List<ChatMessage>): LlmResponse {
         val providerMessages = messages.map { LlmMessage(it.role, it.content) }
-        return when (val resp = provider.complete(providerMessages, temperature, maxTokens)) {
+        // Retry once on quota/429 inside the adapter so every harness caller gets
+        // the same resilience; only a persistent exhaustion surfaces as an error.
+        return when (
+            val resp = LlmResilience.completeWithQuotaRetry(
+                provider, providerMessages, temperature, maxTokens
+            )
+        ) {
             is ProviderLlmResponse.Success ->
                 LlmResponse(
                     text = resp.text,

@@ -11,11 +11,14 @@ import com.androclaw.agent.agent.AgentService
 import com.androclaw.agent.agent.AgentState
 import com.androclaw.agent.agent.RoutineManager
 import com.androclaw.agent.data.AppDatabase
+import com.androclaw.agent.data.CommandHistory
+import com.androclaw.agent.data.CommandHistoryEntry
 import com.androclaw.agent.data.SecurePreferences
 import com.androclaw.agent.data.TaskEntity
 import com.androclaw.agent.perception.ClawAccessibilityService
 import com.androclaw.agent.safety.ConfirmationRequest
 import com.androclaw.agent.safety.SafetyGuard
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -28,6 +31,7 @@ data class ChatUiState(
     val isAccessibilityEnabled: Boolean = false,
     val pendingConfirmation: ConfirmationRequest? = null,
     val taskHistory: List<TaskEntity> = emptyList(),
+    val recentCommands: List<CommandHistoryEntry> = emptyList(),
     val inputText: String = "",
     val isListening: Boolean = false
 )
@@ -91,6 +95,10 @@ class ChatViewModel : ViewModel() {
                 _uiState.value = _uiState.value.copy(taskHistory = tasks)
             }
         }
+        viewModelScope.launch(Dispatchers.IO) {
+            val commands = CommandHistory(context.filesDir).entries()
+            _uiState.value = _uiState.value.copy(recentCommands = commands)
+        }
     }
 
     fun onInputChanged(text: String) {
@@ -108,6 +116,22 @@ class ChatViewModel : ViewModel() {
             return
         }
         service.submitTask(goal)
+        viewModelScope.launch(Dispatchers.IO) {
+            val commands = CommandHistory(context.filesDir).record(goal)
+            _uiState.value = _uiState.value.copy(recentCommands = commands)
+        }
+    }
+
+    fun resubmit(context: Context, command: String) {
+        _uiState.value = _uiState.value.copy(inputText = command)
+        sendTask(context)
+    }
+
+    fun deleteRecentCommand(context: Context, timestampMs: Long) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val commands = CommandHistory(context.filesDir).delete(timestampMs)
+            _uiState.value = _uiState.value.copy(recentCommands = commands)
+        }
     }
 
     fun stopTask() {

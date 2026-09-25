@@ -147,6 +147,28 @@ fun SettingsScreen(
                 }
             }
 
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Column {
+                    Text("Watch Poll Interval", style = MaterialTheme.typography.bodyLarge)
+                    Text("${state.watchPollSeconds}s between chat checks while watching",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(onClick = { viewModel.updateWatchPollSeconds(state.watchPollSeconds - 5) }) {
+                        Icon(Icons.Default.Remove, null)
+                    }
+                    Text("${state.watchPollSeconds}s", style = MaterialTheme.typography.titleMedium)
+                    IconButton(onClick = { viewModel.updateWatchPollSeconds(state.watchPollSeconds + 5) }) {
+                        Icon(Icons.Default.Add, null)
+                    }
+                }
+            }
+
             SwitchSettingRow(
                 title = "Debug Mode",
                 subtitle = "Log UI trees and screenshots (privacy: keep off)",

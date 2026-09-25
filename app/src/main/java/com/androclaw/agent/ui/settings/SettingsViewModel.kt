@@ -19,7 +19,7 @@ data class SettingsUiState(
     val geminiModel: String = "gemini-2.0-flash",
     val ollamaModel: String = "llama3.2",
     val ollamaBaseUrl: String = "http://10.0.2.2:11434",
-    val maxSteps: Int = 25,
+    val maxSteps: Int = 15,
     val debugMode: Boolean = false,
     val confirmMessages: Boolean = true,
     val confirmCalls: Boolean = true,
@@ -33,7 +33,8 @@ data class SettingsUiState(
     val blocklistPackages: Set<String> = emptySet(),
     val showFloatingOverlay: Boolean = false,
     val decisionBackend: String = "off",
-    val layaServerUrl: String = "http://127.0.0.1:7710"
+    val layaServerUrl: String = "http://127.0.0.1:7710",
+    val watchPollSeconds: Int = 20
 )
 
 class SettingsViewModel : ViewModel() {
@@ -71,7 +72,8 @@ class SettingsViewModel : ViewModel() {
             blocklistPackages = p.blocklistPackages,
             showFloatingOverlay = p.showFloatingOverlay,
             decisionBackend = p.decisionBackend,
-            layaServerUrl = p.layaServerUrl
+            layaServerUrl = p.layaServerUrl,
+            watchPollSeconds = p.watchPollSeconds
         )
     }
 
@@ -103,6 +105,7 @@ class SettingsViewModel : ViewModel() {
         p.showFloatingOverlay = s.showFloatingOverlay
         p.decisionBackend = s.decisionBackend
         p.layaServerUrl = s.layaServerUrl
+        p.watchPollSeconds = s.watchPollSeconds
     }
 
     fun updateProvider(provider: LlmProviderType) {
@@ -118,7 +121,11 @@ class SettingsViewModel : ViewModel() {
     fun updateGeminiModel(m: String) { _uiState.value = _uiState.value.copy(geminiModel = m) }
     fun updateOllamaModel(m: String) { _uiState.value = _uiState.value.copy(ollamaModel = m) }
     fun updateOllamaBaseUrl(u: String) { _uiState.value = _uiState.value.copy(ollamaBaseUrl = u) }
-    fun updateMaxSteps(steps: Int) { _uiState.value = _uiState.value.copy(maxSteps = steps.coerceIn(5, 50)) }
+    fun updateMaxSteps(steps: Int) {
+        _uiState.value = _uiState.value.copy(
+            maxSteps = steps.coerceIn(5, com.androclaw.agent.agent.AgentLoop.HARD_MAX_STEPS)
+        )
+    }
     fun updateDebugMode(enabled: Boolean) { _uiState.value = _uiState.value.copy(debugMode = enabled) }
     fun updateConfirmMessages(v: Boolean) { _uiState.value = _uiState.value.copy(confirmMessages = v) }
     fun updateConfirmCalls(v: Boolean) { _uiState.value = _uiState.value.copy(confirmCalls = v) }
@@ -131,4 +138,7 @@ class SettingsViewModel : ViewModel() {
     fun updateShowFloatingOverlay(v: Boolean) { _uiState.value = _uiState.value.copy(showFloatingOverlay = v) }
     fun updateDecisionBackend(v: String) { _uiState.value = _uiState.value.copy(decisionBackend = v) }
     fun updateLayaServerUrl(v: String) { _uiState.value = _uiState.value.copy(layaServerUrl = v) }
+    fun updateWatchPollSeconds(v: Int) {
+        _uiState.value = _uiState.value.copy(watchPollSeconds = v.coerceIn(5, 120))
+    }
 }

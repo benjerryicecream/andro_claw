@@ -62,6 +62,41 @@ class TokenTracker(private val dir: File) {
             .put("outcome", outcome)
         logFile.appendText(entry.toString() + "\n")
     }
+
+    /** Log the decomposition plan for a task plus the tokens it consumed. */
+    @Synchronized
+    fun logPlan(taskId: String, input: String, plan: String, usage: TokenUsage) {
+        sessionUsage += usage
+        val entry = JSONObject()
+            .put("ts", System.currentTimeMillis())
+            .put("kind", "plan")
+            .put("taskId", taskId)
+            .put("input", input.take(120))
+            .put("plan", plan)
+            .put("promptTokens", usage.promptTokens)
+            .put("completionTokens", usage.completionTokens)
+            .put("estCostUsd", usage.estCostUsd())
+            .put("sessionTotal", sessionUsage.total)
+        logFile.appendText(entry.toString() + "\n")
+    }
+
+    /** Log the tokens consumed by one plan/loop step. */
+    @Synchronized
+    fun logStepUsage(taskId: String, step: Int, input: String, usage: TokenUsage, outcome: String) {
+        sessionUsage += usage
+        val entry = JSONObject()
+            .put("ts", System.currentTimeMillis())
+            .put("kind", "step")
+            .put("taskId", taskId)
+            .put("step", step)
+            .put("input", input.take(120))
+            .put("outcome", outcome)
+            .put("promptTokens", usage.promptTokens)
+            .put("completionTokens", usage.completionTokens)
+            .put("estCostUsd", usage.estCostUsd())
+            .put("sessionTotal", sessionUsage.total)
+        logFile.appendText(entry.toString() + "\n")
+    }
 }
 
 class AgentHarness(
@@ -74,8 +109,13 @@ class AgentHarness(
     private val llmSource: String = "unknown"
 ) {
 
-    /** Package brought to the foreground by this task's most recent tool call. */
+    /**
+     * Package brought to the foreground by this task's most recent tool call.
+     */
     private var currentOpenedPackage: String? = null
+
+    /** Look up an executor tool by name (used by the multi-step planner). */
+    fun toolFor(name: String): AgentTool? = tools.find { it.name == name }
 
     /**
      * Result of a harness task. [Completed] results provably finished the goal
