@@ -61,6 +61,10 @@ If the agent attempts a sensitive action (like hitting "Send" in a messaging app
 
 AndroClaw has profound access to your device. By design, **it only communicates with the LLM provider you configure** — but note that in cloud mode the on-screen content the agent reads is sent to that provider, including screenshots when the vision fallback is used. That can include private messages, account details, or anything else visible on screen at the time. No screen data is logged to disk or sent to any other servers. We recommend using the **Allowlist Mode** in Settings to restrict the agent to specific, low-risk apps while testing.
 
+## Disclaimer
+
+This software is provided as-is, with no warranty. AndroClaw runs an Accessibility Service that grants it deep access to your device — it can tap, type, and take actions on your behalf. Before enabling the Accessibility permission, and before connecting any cloud LLM provider, review what the agent may do; test it with a throwaway account or an emulator first. You are responsible for what the agent does with the permissions you grant.
+
 ## Safety
 
 The agent passes on-screen text to the LLM on every step, including content from web pages and incoming messages. That text is **untrusted input** and could contain instructions designed to steer the agent's behavior (prompt injection). Confirmation gates and the allow/blocklist reduce this risk but do not eliminate it. We recommend testing in an emulator or with a throwaway account before using AndroClaw with sensitive apps or data.
