@@ -172,6 +172,14 @@ class AgentLoop(
                 val actionJson = try { Json.encodeToString(AgentAction.serializer(), action) } catch (e: Exception) { action.toString() }
                 steps.add(StepRecord(stepIndex, "Navigating to ${parsedIntent.url} → $result", actionJson))
                 stepIndex++
+                if (!result.startsWith("Failed")) {
+                    _state.value = AgentState.Completed(
+                        goal = goal,
+                        steps = steps.toList(),
+                        summary = "Navigated to ${parsedIntent.url}"
+                    )
+                    return
+                }
             }
             is RequestHarness.ParsedIntent.WebSearch -> {
                 val action = AgentAction.OpenUrl(parsedIntent.searchUrl)
