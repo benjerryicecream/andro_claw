@@ -20,6 +20,7 @@ class OpenAIProvider(
 ) : LlmProvider {
 
     override val displayName: String = "OpenAI-compatible"
+    override val name: String = "openai"
 
     private val client = OkHttpClient.Builder()
         .connectTimeout(30, TimeUnit.SECONDS)

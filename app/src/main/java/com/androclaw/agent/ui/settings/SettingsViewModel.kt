@@ -31,7 +31,9 @@ data class SettingsUiState(
     val useAllowlist: Boolean = false,
     val allowlistPackages: Set<String> = emptySet(),
     val blocklistPackages: Set<String> = emptySet(),
-    val showFloatingOverlay: Boolean = false
+    val showFloatingOverlay: Boolean = false,
+    val decisionBackend: String = "off",
+    val layaServerUrl: String = "http://127.0.0.1:7710"
 )
 
 class SettingsViewModel : ViewModel() {
@@ -67,7 +69,9 @@ class SettingsViewModel : ViewModel() {
             useAllowlist = p.useAllowlist,
             allowlistPackages = p.allowlistPackages,
             blocklistPackages = p.blocklistPackages,
-            showFloatingOverlay = p.showFloatingOverlay
+            showFloatingOverlay = p.showFloatingOverlay,
+            decisionBackend = p.decisionBackend,
+            layaServerUrl = p.layaServerUrl
         )
     }
 
@@ -97,6 +101,8 @@ class SettingsViewModel : ViewModel() {
         p.allowlistPackages = s.allowlistPackages
         p.blocklistPackages = s.blocklistPackages
         p.showFloatingOverlay = s.showFloatingOverlay
+        p.decisionBackend = s.decisionBackend
+        p.layaServerUrl = s.layaServerUrl
     }
 
     fun updateProvider(provider: LlmProviderType) {
@@ -123,4 +129,6 @@ class SettingsViewModel : ViewModel() {
     fun updateUnrestrictedMode(v: Boolean) { _uiState.value = _uiState.value.copy(unrestrictedMode = v) }
     fun updateUseAllowlist(v: Boolean) { _uiState.value = _uiState.value.copy(useAllowlist = v) }
     fun updateShowFloatingOverlay(v: Boolean) { _uiState.value = _uiState.value.copy(showFloatingOverlay = v) }
+    fun updateDecisionBackend(v: String) { _uiState.value = _uiState.value.copy(decisionBackend = v) }
+    fun updateLayaServerUrl(v: String) { _uiState.value = _uiState.value.copy(layaServerUrl = v) }
 }

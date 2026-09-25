@@ -133,6 +133,15 @@ class SecurePreferences(context: Context) {
         get() = securePrefs.getBoolean(KEY_SHOW_FLOATING_OVERLAY, false)
         set(value) = securePrefs.edit().putBoolean(KEY_SHOW_FLOATING_OVERLAY, value).apply()
 
+    // --- System 1 decision backend ---
+    var decisionBackend: String
+        get() = securePrefs.getString(KEY_DECISION_BACKEND, DECISION_BACKEND_OFF) ?: DECISION_BACKEND_OFF
+        set(value) = securePrefs.edit().putString(KEY_DECISION_BACKEND, value).apply()
+
+    var layaServerUrl: String
+        get() = securePrefs.getString(KEY_LAYA_SERVER_URL, DEFAULT_LAYA_SERVER_URL) ?: DEFAULT_LAYA_SERVER_URL
+        set(value) = securePrefs.edit().putString(KEY_LAYA_SERVER_URL, value).apply()
+
     companion object {
         private const val KEY_PROVIDER = "provider"
         private const val KEY_OPENAI_KEY = "openai_key"
@@ -158,6 +167,12 @@ class SecurePreferences(context: Context) {
         private const val KEY_BLOCKLIST = "blocklist"
         private const val KEY_USE_ALLOWLIST = "use_allowlist"
         private const val KEY_SHOW_FLOATING_OVERLAY = "show_floating_overlay"
+        private const val KEY_DECISION_BACKEND = "decision_backend"
+        private const val KEY_LAYA_SERVER_URL = "laya_server_url"
+
+        const val DECISION_BACKEND_OFF = "off"
+        const val DECISION_BACKEND_LAYA = "laya"
+        const val DEFAULT_LAYA_SERVER_URL = "http://127.0.0.1:7710"
 
         val DEFAULT_BLOCKLIST = setOf(
             "com.androclaw.agent",

@@ -19,6 +19,7 @@ class GeminiProvider(
 ) : LlmProvider {
 
     override val displayName: String = "Google Gemini"
+    override val name: String = "gemini"
 
     private val client = OkHttpClient.Builder()
         .connectTimeout(30, TimeUnit.SECONDS)

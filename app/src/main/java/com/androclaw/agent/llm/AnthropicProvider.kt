@@ -19,6 +19,7 @@ class AnthropicProvider(
 ) : LlmProvider {
 
     override val displayName: String = "Anthropic"
+    override val name: String = "anthropic"
 
     private val client = OkHttpClient.Builder()
         .connectTimeout(30, TimeUnit.SECONDS)

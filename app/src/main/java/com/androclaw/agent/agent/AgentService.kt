@@ -64,12 +64,26 @@ class AgentService : Service() {
         safetyGuard = SafetyGuard(prefs)
         screenCapture = ScreenCapture()
 
+        val trainingLogger = TrainingLogger(applicationContext.filesDir)
+        val decisionClient: DecisionClient? = when {
+            prefs.decisionBackend == SecurePreferences.DECISION_BACKEND_LAYA &&
+                prefs.layaServerUrl.isNotBlank() -> LayaServerBackend(prefs.layaServerUrl)
+            else -> null
+        }
+
         val harnessLlm = LlmHarnessAdapter(createLlmProvider(prefs))
         harness = AgentHarness(
             llm = { messages -> harnessLlm.complete(messages) },
-            tools = listOf(OpenAppTool(applicationContext, safetyGuard)),
+            tools = listOf(
+                OpenAppTool(
+                    applicationContext, safetyGuard, decisionClient, trainingLogger, harnessLlm.source
+                )
+            ),
             tracker = TokenTracker(applicationContext.filesDir),
-            maxSteps = prefs.maxSteps.coerceAtLeast(1)
+            maxSteps = prefs.maxSteps.coerceAtLeast(1),
+            decisionClient = decisionClient,
+            trainingLogger = trainingLogger,
+            llmSource = harnessLlm.source
         )
 
         agentLoop = AgentLoop(safetyGuard, prefs, screenCapture)

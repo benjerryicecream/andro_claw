@@ -24,6 +24,7 @@ class OllamaProvider(
 ) : LlmProvider {
 
     override val displayName: String = "Ollama (Local)"
+    override val name: String = "ollama"
 
     private val client = OkHttpClient.Builder()
         .connectTimeout(30, TimeUnit.SECONDS)

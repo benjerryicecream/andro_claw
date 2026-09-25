@@ -19,6 +19,9 @@ interface LlmProvider {
 
     /** Provider display name */
     val displayName: String
+
+    /** Stable machine identifier for training-data provenance (e.g. "openai", "gemini"). */
+    val name: String
 }
 
 data class LlmMessage(

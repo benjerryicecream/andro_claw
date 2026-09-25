@@ -16,6 +16,9 @@ class LlmHarnessAdapter(
     private val temperature: Float = 0.1f,
     private val maxTokens: Int = 512
 ) {
+    /** Provider identifier for training-data provenance (e.g. "openai", "gemini"). */
+    val source: String get() = provider.name
+
     suspend fun complete(messages: List<ChatMessage>): LlmResponse {
         val providerMessages = messages.map { LlmMessage(it.role, it.content) }
         return when (val resp = provider.complete(providerMessages, temperature, maxTokens)) {

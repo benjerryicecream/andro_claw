@@ -20,6 +20,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.androclaw.agent.data.LlmProviderType
+import com.androclaw.agent.data.SecurePreferences
 import com.androclaw.agent.ui.overlay.FloatingOverlayService
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -89,6 +90,36 @@ fun SettingsScreen(
                     TextSettingField("Base URL", state.ollamaBaseUrl, viewModel::updateOllamaBaseUrl)
                 }
             }
+
+            HorizontalDivider()
+
+            // System 1 decision backend
+            SectionHeader("Decision Backend")
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                FilterChip(
+                    selected = state.decisionBackend == SecurePreferences.DECISION_BACKEND_OFF,
+                    onClick = { viewModel.updateDecisionBackend(SecurePreferences.DECISION_BACKEND_OFF) },
+                    label = { Text("Off") },
+                    modifier = Modifier.weight(1f)
+                )
+                FilterChip(
+                    selected = state.decisionBackend == SecurePreferences.DECISION_BACKEND_LAYA,
+                    onClick = { viewModel.updateDecisionBackend(SecurePreferences.DECISION_BACKEND_LAYA) },
+                    label = { Text("Laya server") },
+                    modifier = Modifier.weight(1f)
+                )
+            }
+            if (state.decisionBackend == SecurePreferences.DECISION_BACKEND_LAYA) {
+                TextSettingField("Laya server URL", state.layaServerUrl, viewModel::updateLayaServerUrl)
+            }
+            Text(
+                "Sends UI text to your server on your network. No cloud involved.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
 
             HorizontalDivider()
 

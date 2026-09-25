@@ -24,6 +24,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -73,16 +74,23 @@ class AgentLoop(
         runJob = scope.launch(Dispatchers.IO) {
             try {
                 _state.value = AgentState.Planning(goal)
-                val result = harness.runTask(goal)
-                val summary = result.trim().take(400)
-                _state.value = if (
-                    summary.startsWith("error:", ignoreCase = true) ||
-                    summary.startsWith("stopped after", ignoreCase = true) ||
-                    summary.startsWith("cancelled:", ignoreCase = true)
-                ) {
-                    AgentState.Failed(goal, emptyList(), summary)
-                } else {
-                    AgentState.Completed(goal, emptyList(), summary)
+                when (val outcome = harness.runTask(goal)) {
+                    is AgentHarness.Outcome.Completed ->
+                        _state.value = AgentState.Completed(goal, emptyList(), outcome.summary.trim().take(400))
+                    is AgentHarness.Outcome.Failed ->
+                        _state.value = AgentState.Failed(goal, emptyList(), outcome.summary.trim().take(400))
+                    is AgentHarness.Outcome.Continue -> {
+                        Log.i(TAG, "Harness result indeterminate; feeding it as first observation and continuing goal in perceive-act loop")
+                        val service = ClawAccessibilityService.instance.value
+                        if (service != null) {
+                            withContext(Dispatchers.Main) { runLoop(goal, outcome.summary) }
+                        } else {
+                            _state.value = AgentState.Failed(
+                                goal, emptyList(),
+                                "Accessibility service is not enabled, so AndroClaw could not complete the task on device."
+                            )
+                        }
+                    }
                 }
             } catch (e: CancellationException) {
                 _state.value = AgentState.Stopped(goal, emptyList())
@@ -121,7 +129,7 @@ class AgentLoop(
         _state.value = AgentState.Idle
     }
 
-    private suspend fun runLoop(goal: String) {
+    private suspend fun runLoop(goal: String, harnessResult: String? = null) {
         val accessibilityService = ClawAccessibilityService.instance.value
         if (accessibilityService == null) {
             _state.value = AgentState.Failed(goal, emptyList(), "Accessibility service is not enabled")
@@ -227,7 +235,8 @@ class AgentLoop(
                     maxSteps = maxSteps,
                     completedSteps = steps,
                     uiText = uiText,
-                    screenshotBase64 = screenshotBase64
+                    screenshotBase64 = screenshotBase64,
+                    firstObservation = if (stepIndex == 0) harnessResult else null
                 )
                 conversationHistory.add(LlmMessage("user", userMessage))
 
@@ -412,11 +421,17 @@ class AgentLoop(
         maxSteps: Int,
         completedSteps: List<StepRecord>,
         uiText: String,
-        screenshotBase64: String?
+        screenshotBase64: String?,
+        firstObservation: String? = null
     ): String {
         val sb = StringBuilder()
         sb.appendLine("GOAL: $goal")
         sb.appendLine("STEP: ${stepIndex + 1} of $maxSteps")
+
+        if (firstObservation != null) {
+            sb.appendLine("\nALREADY PERFORMED BEFORE THIS RUN:")
+            sb.appendLine(firstObservation)
+        }
 
         if (completedSteps.isNotEmpty()) {
             sb.appendLine("\nCOMPLETED STEPS:")
