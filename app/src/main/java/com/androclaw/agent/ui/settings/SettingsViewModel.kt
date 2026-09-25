@@ -27,9 +27,11 @@ data class SettingsUiState(
     val confirmDeletions: Boolean = true,
     val confirmSystemSettings: Boolean = true,
     val confirmPermissions: Boolean = true,
+    val unrestrictedMode: Boolean = true,
     val useAllowlist: Boolean = false,
     val allowlistPackages: Set<String> = emptySet(),
-    val blocklistPackages: Set<String> = emptySet()
+    val blocklistPackages: Set<String> = emptySet(),
+    val showFloatingOverlay: Boolean = false
 )
 
 class SettingsViewModel : ViewModel() {
@@ -61,9 +63,11 @@ class SettingsViewModel : ViewModel() {
             confirmDeletions = p.confirmDeletions,
             confirmSystemSettings = p.confirmSystemSettings,
             confirmPermissions = p.confirmPermissions,
+            unrestrictedMode = p.unrestrictedMode,
             useAllowlist = p.useAllowlist,
             allowlistPackages = p.allowlistPackages,
-            blocklistPackages = p.blocklistPackages
+            blocklistPackages = p.blocklistPackages,
+            showFloatingOverlay = p.showFloatingOverlay
         )
     }
 
@@ -88,9 +92,11 @@ class SettingsViewModel : ViewModel() {
         p.confirmDeletions = s.confirmDeletions
         p.confirmSystemSettings = s.confirmSystemSettings
         p.confirmPermissions = s.confirmPermissions
+        p.unrestrictedMode = s.unrestrictedMode
         p.useAllowlist = s.useAllowlist
         p.allowlistPackages = s.allowlistPackages
         p.blocklistPackages = s.blocklistPackages
+        p.showFloatingOverlay = s.showFloatingOverlay
     }
 
     fun updateProvider(provider: LlmProviderType) {
@@ -114,5 +120,7 @@ class SettingsViewModel : ViewModel() {
     fun updateConfirmDeletions(v: Boolean) { _uiState.value = _uiState.value.copy(confirmDeletions = v) }
     fun updateConfirmSystemSettings(v: Boolean) { _uiState.value = _uiState.value.copy(confirmSystemSettings = v) }
     fun updateConfirmPermissions(v: Boolean) { _uiState.value = _uiState.value.copy(confirmPermissions = v) }
+    fun updateUnrestrictedMode(v: Boolean) { _uiState.value = _uiState.value.copy(unrestrictedMode = v) }
     fun updateUseAllowlist(v: Boolean) { _uiState.value = _uiState.value.copy(useAllowlist = v) }
+    fun updateShowFloatingOverlay(v: Boolean) { _uiState.value = _uiState.value.copy(showFloatingOverlay = v) }
 }

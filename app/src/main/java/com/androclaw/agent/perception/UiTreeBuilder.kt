@@ -24,6 +24,7 @@ object UiTreeBuilder {
     @Synchronized
     fun buildSnapshot(
         windows: List<AccessibilityWindowInfo>,
+        activeRoot: AccessibilityNodeInfo? = null,
         packageName: String,
         activityName: String
     ): UiSnapshot {
@@ -44,6 +45,18 @@ object UiTreeBuilder {
                 }
             } finally {
                 root.recycle()
+            }
+        }
+
+        // Fallback to active window root if windows list didn't yield any nodes
+        if (roots.isEmpty() && activeRoot != null) {
+            try {
+                val node = buildNode(activeRoot, 0, 0)
+                if (node != null) {
+                    roots.add(node)
+                }
+            } finally {
+                activeRoot.recycle()
             }
         }
 

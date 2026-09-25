@@ -1,5 +1,6 @@
 package com.androclaw.agent.ui.settings
 
+import android.content.Intent
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
@@ -19,6 +20,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.androclaw.agent.data.LlmProviderType
+import com.androclaw.agent.ui.overlay.FloatingOverlayService
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -123,19 +125,28 @@ fun SettingsScreen(
 
             HorizontalDivider()
 
-            // Confirmation policies
-            SectionHeader("Confirmation Policies")
-            Text(
-                "AndroClaw will ask before performing these actions:",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+            // Confirmation policies & Unrestricted Mode
+            SectionHeader("Access & Safety Controls")
+            SwitchSettingRow(
+                title = "Unrestricted Mode",
+                subtitle = "Allow agent full access to all apps without confirmation prompts",
+                checked = state.unrestrictedMode,
+                onCheckedChange = viewModel::updateUnrestrictedMode
             )
-            SwitchSettingRow("Send Messages", "SMS, email, chat", state.confirmMessages, viewModel::updateConfirmMessages)
-            SwitchSettingRow("Make Calls", "Phone and video calls", state.confirmCalls, viewModel::updateConfirmCalls)
-            SwitchSettingRow("Payments", "Payment and banking apps", state.confirmPayments, viewModel::updateConfirmPayments)
-            SwitchSettingRow("Delete Data", "Delete, clear, erase actions", state.confirmDeletions, viewModel::updateConfirmDeletions)
-            SwitchSettingRow("System Settings", "Changing device settings", state.confirmSystemSettings, viewModel::updateConfirmSystemSettings)
-            SwitchSettingRow("Grant Permissions", "Allowing app permissions", state.confirmPermissions, viewModel::updateConfirmPermissions)
+
+            if (!state.unrestrictedMode) {
+                Text(
+                    "AndroClaw will ask before performing these actions:",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                SwitchSettingRow("Send Messages", "SMS, email, chat", state.confirmMessages, viewModel::updateConfirmMessages)
+                SwitchSettingRow("Make Calls", "Phone and video calls", state.confirmCalls, viewModel::updateConfirmCalls)
+                SwitchSettingRow("Payments", "Payment and banking apps", state.confirmPayments, viewModel::updateConfirmPayments)
+                SwitchSettingRow("Delete Data", "Delete, clear, erase actions", state.confirmDeletions, viewModel::updateConfirmDeletions)
+                SwitchSettingRow("System Settings", "Changing device settings", state.confirmSystemSettings, viewModel::updateConfirmSystemSettings)
+                SwitchSettingRow("Grant Permissions", "Allowing app permissions", state.confirmPermissions, viewModel::updateConfirmPermissions)
+            }
 
             HorizontalDivider()
 
@@ -146,6 +157,21 @@ fun SettingsScreen(
                 subtitle = "Only operate in explicitly listed apps",
                 checked = state.useAllowlist,
                 onCheckedChange = viewModel::updateUseAllowlist
+            )
+            SwitchSettingRow(
+                title = "Floating Overlay",
+                subtitle = "Enable a floating button to summon the agent from any app",
+                checked = state.showFloatingOverlay,
+                onCheckedChange = {
+                    viewModel.updateShowFloatingOverlay(it)
+                    // Toggle service here
+                    val intent = Intent(context, FloatingOverlayService::class.java)
+                    if (it) {
+                        context.startService(intent)
+                    } else {
+                        context.stopService(intent)
+                    }
+                }
             )
             if (state.blocklistPackages.isNotEmpty()) {
                 Text(

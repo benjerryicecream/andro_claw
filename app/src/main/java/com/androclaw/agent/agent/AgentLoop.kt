@@ -1,11 +1,13 @@
 package com.androclaw.agent.agent
 
 import android.util.Log
+import com.androclaw.agent.data.LlmProviderType
 import com.androclaw.agent.data.SecurePreferences
 import com.androclaw.agent.data.StepRecord
 import com.androclaw.agent.data.TaskStatus
 import com.androclaw.agent.llm.LlmMessage
 import com.androclaw.agent.llm.LlmProvider
+import com.androclaw.agent.llm.LlmProviderFactory
 import com.androclaw.agent.llm.LlmResponse
 import com.androclaw.agent.perception.ClawAccessibilityService
 import com.androclaw.agent.perception.ScreenCapture
@@ -14,6 +16,7 @@ import com.androclaw.agent.safety.SafetyGuard
 import com.androclaw.agent.safety.SafetyResult
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -23,16 +26,17 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 
 /**
  * The core agent loop.
  * Receives a goal, manages the LLM conversation, executes actions, and emits state.
  */
 class AgentLoop(
-    private val llmProvider: LlmProvider,
     private val safetyGuard: SafetyGuard,
     private val prefs: SecurePreferences,
-    private val screenCapture: ScreenCapture
+    private val screenCapture: ScreenCapture,
+    private val llmProviderOverride: LlmProvider? = null
 ) {
     companion object {
         private const val TAG = "AgentLoop"
@@ -57,6 +61,35 @@ class AgentLoop(
         stop()
         runJob = scope.launch {
             runLoop(goal)
+        }
+    }
+
+    /**
+     * Run a user goal through the AgentHarness tool-call loop instead of the direct LLM loop.
+     * Reuses the same state machine, notifications and task persistence.
+     */
+    fun runWithHarness(goal: String, harness: AgentHarness, scope: CoroutineScope) {
+        stop()
+        runJob = scope.launch(Dispatchers.IO) {
+            try {
+                _state.value = AgentState.Planning(goal)
+                val result = harness.runTask(goal)
+                val summary = result.trim().take(400)
+                _state.value = if (
+                    summary.startsWith("error:", ignoreCase = true) ||
+                    summary.startsWith("stopped after", ignoreCase = true) ||
+                    summary.startsWith("cancelled:", ignoreCase = true)
+                ) {
+                    AgentState.Failed(goal, emptyList(), summary)
+                } else {
+                    AgentState.Completed(goal, emptyList(), summary)
+                }
+            } catch (e: CancellationException) {
+                _state.value = AgentState.Stopped(goal, emptyList())
+            } catch (e: Exception) {
+                Log.e(TAG, "Agent harness error", e)
+                _state.value = AgentState.Failed(goal, emptyList(), e.message ?: "Unexpected error")
+            }
         }
     }
 
@@ -95,6 +128,29 @@ class AgentLoop(
             return
         }
 
+        val activeLlmProvider = llmProviderOverride ?: LlmProviderFactory.create(prefs)
+        val providerType = try {
+            LlmProviderType.valueOf(prefs.selectedProvider)
+        } catch (e: Exception) {
+            LlmProviderType.OPENAI
+        }
+
+        val isKeyMissing = when (providerType) {
+            LlmProviderType.OPENAI -> prefs.openAiApiKey.isBlank()
+            LlmProviderType.ANTHROPIC -> prefs.anthropicApiKey.isBlank()
+            LlmProviderType.GEMINI -> prefs.geminiApiKey.isBlank()
+            LlmProviderType.OLLAMA -> false
+        }
+
+        if (isKeyMissing) {
+            _state.value = AgentState.Failed(
+                goal,
+                emptyList(),
+                "API key for ${providerType.name} is missing. Please enter your API key in Settings."
+            )
+            return
+        }
+
         val maxSteps = prefs.maxSteps
         val steps = mutableListOf<StepRecord>()
         val conversationHistory = mutableListOf<LlmMessage>()
@@ -106,13 +162,39 @@ class AgentLoop(
         val systemPrompt = buildSystemPrompt()
         conversationHistory.add(LlmMessage("system", systemPrompt))
 
+        // Process request through RequestHarness for deterministic intent shortcuts
+        val parsedIntent = RequestHarness.parseGoal(goal)
+        when (parsedIntent) {
+            is RequestHarness.ParsedIntent.WebNavigation -> {
+                val action = AgentAction.OpenUrl(parsedIntent.url)
+                val executor = accessibilityService.actionExecutor
+                val result = executor.execute(action)
+                val actionJson = try { Json.encodeToString(AgentAction.serializer(), action) } catch (e: Exception) { action.toString() }
+                steps.add(StepRecord(stepIndex, "Navigating to ${parsedIntent.url} → $result", actionJson))
+                stepIndex++
+            }
+            is RequestHarness.ParsedIntent.WebSearch -> {
+                val action = AgentAction.OpenUrl(parsedIntent.searchUrl)
+                val executor = accessibilityService.actionExecutor
+                val result = executor.execute(action)
+                val actionJson = try { Json.encodeToString(AgentAction.serializer(), action) } catch (e: Exception) { action.toString() }
+                steps.add(StepRecord(stepIndex, "Searching for '${parsedIntent.query}' → $result", actionJson))
+                stepIndex++
+            }
+            is RequestHarness.ParsedIntent.GeneralTask -> { /* Handled via standard LLM loop */ }
+        }
+
         try {
             while (stepIndex < maxSteps) {
                 // Check if we're still running
                 if (!kotlinx.coroutines.currentCoroutineContext().isActive) break
 
-                // Build current observation
-                val snapshot = accessibilityService.buildSnapshot()
+                // Build current observation (with retry if initial snapshot is empty)
+                var snapshot = accessibilityService.buildSnapshot()
+                if (snapshot.isEmpty()) {
+                    delay(800L)
+                    snapshot = accessibilityService.buildSnapshot()
+                }
                 val uiText = snapshot.toPromptString()
 
                 // Vision fallback: capture screenshot if tree is empty
@@ -141,7 +223,7 @@ class AgentLoop(
                 )
 
                 // Call LLM
-                val llmResponse = llmProvider.complete(
+                val llmResponse = activeLlmProvider.complete(
                     messages = conversationHistory,
                     temperature = 0.1f,
                     maxTokens = 512
@@ -274,9 +356,9 @@ class AgentLoop(
         {
           "status": "action" | "done" | "failed" | "needs_user_input",
           "narration": "Short description of what you're doing or why",
-          "action": { "action": "<type>", ...fields },  // only when status=action
-          "reason": "explanation",  // for done/failed
-          "question": "what to ask user"  // for needs_user_input
+          "action": { "action": "<type>", ...fields },  // required when status=action
+          "reason": "explanation",  // required when status=done or failed
+          "question": "what to ask user"  // required when status=needs_user_input
         }
         
         ACTION TYPES:
@@ -287,18 +369,25 @@ class AgentLoop(
         - {"action": "back"}
         - {"action": "home"}
         - {"action": "recents"}
-        - {"action": "open_app", "package_name": "com.example.app"}
+        - {"action": "open_app", "package_name": "com.android.chrome"}
         - {"action": "wait", "millis": 1000}
         
-        RULES:
-        1. Use node IDs from the UI tree exactly as shown.
-        2. Prefer clicking visible, interactive elements.
-        3. If the screen looks wrong, try HOME or BACK.
-        4. If you can't find what you need, try open_app with the right package.
-        5. Respond with {"status": "done"} when the task is complete.
-        6. Respond with {"status": "needs_user_input"} if you need information you can't get from the screen.
-        7. Respond with {"status": "failed"} if the task is genuinely impossible.
-        8. Be concise. Each narration should be one short sentence.
+        COMMON PACKAGE NAMES:
+        - Google Chrome / Web Browser: "com.android.chrome"
+        - Google Maps: "com.google.android.apps.maps"
+        - YouTube: "com.google.android.youtube"
+        - Gmail: "com.google.android.gm"
+        - Settings: "com.android.settings"
+        - Messages: "com.google.android.apps.messaging"
+        
+        STRATEGY FOR OPENING APPS & WEBPAGES:
+        1. To open an app, use {"action": "open_app", "package_name": "com.android.chrome"} (or common name like "chrome", "maps", "youtube").
+        2. To navigate to a website in Chrome:
+           - First open Chrome: {"action": "open_app", "package_name": "com.android.chrome"}.
+           - Once Chrome is open, locate the address bar / search field in the UI tree (e.g. text or description like "Search or type URL", or ID like "url_bar", "search_box").
+           - Use {"action": "set_text", "node_id": <id>, "text": "https://example.com"} to type the URL into the address bar.
+        3. Do NOT press HOME or stop unless the task is completely finished.
+        4. Respond with {"status": "done"} ONLY when the user's task is fully completed on screen.
     """.trimIndent()
 
     private fun buildUserMessage(
@@ -354,21 +443,10 @@ class AgentLoop(
             val rawJson = kotlinx.serialization.json.Json.parseToJsonElement(jsonSlice)
             val obj = rawJson.jsonObject
 
-            val status = obj["status"]?.let {
-                kotlinx.serialization.json.Json.decodeFromJsonElement<String>(it)
-            } ?: return null
-
-            val narration = obj["narration"]?.let {
-                kotlinx.serialization.json.Json.decodeFromJsonElement<String>(it)
-            } ?: ""
-
-            val reason = obj["reason"]?.let {
-                kotlinx.serialization.json.Json.decodeFromJsonElement<String>(it)
-            } ?: ""
-
-            val question = obj["question"]?.let {
-                kotlinx.serialization.json.Json.decodeFromJsonElement<String>(it)
-            } ?: ""
+            val status = obj["status"]?.jsonPrimitive?.content ?: return null
+            val narration = obj["narration"]?.jsonPrimitive?.content ?: ""
+            val reason = obj["reason"]?.jsonPrimitive?.content ?: ""
+            val question = obj["question"]?.jsonPrimitive?.content ?: ""
 
             val action = obj["action"]?.let { actionElement ->
                 if (actionElement is kotlinx.serialization.json.JsonObject) {
@@ -390,55 +468,41 @@ class AgentLoop(
     }
 
     private fun parseAction(obj: kotlinx.serialization.json.JsonObject): AgentAction? {
-        val actionType = obj["action"]?.let {
-            kotlinx.serialization.json.Json.decodeFromJsonElement<String>(it)
-        } ?: return null
+        val actionType = obj["action"]?.jsonPrimitive?.content ?: return null
 
         return try {
             when (actionType) {
                 "click" -> {
-                    val nodeId = obj["node_id"]?.let {
-                        kotlinx.serialization.json.Json.decodeFromJsonElement<Int>(it)
-                    } ?: return null
+                    val nodeId = obj["node_id"]?.jsonPrimitive?.content?.toIntOrNull() ?: return null
                     AgentAction.Click(nodeId)
                 }
                 "long_click" -> {
-                    val nodeId = obj["node_id"]?.let {
-                        kotlinx.serialization.json.Json.decodeFromJsonElement<Int>(it)
-                    } ?: return null
+                    val nodeId = obj["node_id"]?.jsonPrimitive?.content?.toIntOrNull() ?: return null
                     AgentAction.LongClick(nodeId)
                 }
                 "set_text" -> {
-                    val nodeId = obj["node_id"]?.let {
-                        kotlinx.serialization.json.Json.decodeFromJsonElement<Int>(it)
-                    } ?: return null
-                    val text = obj["text"]?.let {
-                        kotlinx.serialization.json.Json.decodeFromJsonElement<String>(it)
-                    } ?: ""
+                    val nodeId = obj["node_id"]?.jsonPrimitive?.content?.toIntOrNull() ?: return null
+                    val text = obj["text"]?.jsonPrimitive?.content ?: ""
                     AgentAction.SetText(nodeId, text)
                 }
                 "scroll" -> {
-                    val nodeId = obj["node_id"]?.let {
-                        kotlinx.serialization.json.Json.decodeFromJsonElement<Int>(it)
-                    } ?: return null
-                    val direction = obj["direction"]?.let {
-                        kotlinx.serialization.json.Json.decodeFromJsonElement<String>(it)
-                    } ?: "down"
+                    val nodeId = obj["node_id"]?.jsonPrimitive?.content?.toIntOrNull() ?: return null
+                    val direction = obj["direction"]?.jsonPrimitive?.content ?: "down"
                     AgentAction.Scroll(nodeId, direction)
                 }
                 "back" -> AgentAction.Back
                 "home" -> AgentAction.Home
                 "recents" -> AgentAction.Recents
                 "open_app" -> {
-                    val pkg = obj["package_name"]?.let {
-                        kotlinx.serialization.json.Json.decodeFromJsonElement<String>(it)
-                    } ?: return null
+                    val pkg = obj["package_name"]?.jsonPrimitive?.content ?: return null
                     AgentAction.OpenApp(pkg)
                 }
+                "open_url" -> {
+                    val url = obj["url"]?.jsonPrimitive?.content ?: return null
+                    AgentAction.OpenUrl(url)
+                }
                 "wait" -> {
-                    val millis = obj["millis"]?.let {
-                        kotlinx.serialization.json.Json.decodeFromJsonElement<Long>(it)
-                    } ?: 1000L
+                    val millis = obj["millis"]?.jsonPrimitive?.content?.toLongOrNull() ?: 1000L
                     AgentAction.Wait(millis)
                 }
                 else -> null

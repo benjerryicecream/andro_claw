@@ -112,6 +112,10 @@ class SecurePreferences(context: Context) {
         get() = securePrefs.getBoolean(KEY_CONFIRM_PERMISSIONS, true)
         set(value) = securePrefs.edit().putBoolean(KEY_CONFIRM_PERMISSIONS, value).apply()
 
+    var unrestrictedMode: Boolean
+        get() = securePrefs.getBoolean(KEY_UNRESTRICTED_MODE, true)
+        set(value) = securePrefs.edit().putBoolean(KEY_UNRESTRICTED_MODE, value).apply()
+
     // --- App filter ---
     var allowlistPackages: Set<String>
         get() = securePrefs.getStringSet(KEY_ALLOWLIST, emptySet()) ?: emptySet()
@@ -124,6 +128,10 @@ class SecurePreferences(context: Context) {
     var useAllowlist: Boolean
         get() = securePrefs.getBoolean(KEY_USE_ALLOWLIST, false)
         set(value) = securePrefs.edit().putBoolean(KEY_USE_ALLOWLIST, value).apply()
+
+    var showFloatingOverlay: Boolean
+        get() = securePrefs.getBoolean(KEY_SHOW_FLOATING_OVERLAY, false)
+        set(value) = securePrefs.edit().putBoolean(KEY_SHOW_FLOATING_OVERLAY, value).apply()
 
     companion object {
         private const val KEY_PROVIDER = "provider"
@@ -145,9 +153,11 @@ class SecurePreferences(context: Context) {
         private const val KEY_CONFIRM_DELETIONS = "confirm_deletions"
         private const val KEY_CONFIRM_SYSTEM = "confirm_system"
         private const val KEY_CONFIRM_PERMISSIONS = "confirm_permissions"
+        private const val KEY_UNRESTRICTED_MODE = "unrestricted_mode"
         private const val KEY_ALLOWLIST = "allowlist"
         private const val KEY_BLOCKLIST = "blocklist"
         private const val KEY_USE_ALLOWLIST = "use_allowlist"
+        private const val KEY_SHOW_FLOATING_OVERLAY = "show_floating_overlay"
 
         val DEFAULT_BLOCKLIST = setOf(
             "com.androclaw.agent",

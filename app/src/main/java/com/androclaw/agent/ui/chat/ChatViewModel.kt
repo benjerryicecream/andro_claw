@@ -107,7 +107,7 @@ class ChatViewModel : ViewModel() {
             bindService(context)
             return
         }
-        service.agentLoop.start(goal, viewModelScope)
+        service.submitTask(goal)
     }
 
     fun stopTask() {

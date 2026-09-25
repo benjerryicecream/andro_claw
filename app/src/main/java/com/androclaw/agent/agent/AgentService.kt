@@ -14,7 +14,9 @@ import com.androclaw.agent.data.AppDatabase
 import com.androclaw.agent.data.SecurePreferences
 import com.androclaw.agent.data.TaskEntity
 import com.androclaw.agent.data.TaskStatus
+import com.androclaw.agent.llm.LlmProvider
 import com.androclaw.agent.llm.LlmProviderFactory
+import com.androclaw.agent.llm.OpenAIProvider
 import com.androclaw.agent.perception.ScreenCapture
 import com.androclaw.agent.safety.SafetyGuard
 import kotlinx.coroutines.CoroutineScope
@@ -39,6 +41,8 @@ class AgentService : Service() {
 
     lateinit var agentLoop: AgentLoop
         private set
+    lateinit var harness: AgentHarness
+        private set
     lateinit var safetyGuard: SafetyGuard
         private set
     lateinit var screenCapture: ScreenCapture
@@ -59,8 +63,16 @@ class AgentService : Service() {
         val db = AppDatabase.getInstance(applicationContext)
         safetyGuard = SafetyGuard(prefs)
         screenCapture = ScreenCapture()
-        val llmProvider = LlmProviderFactory.create(prefs)
-        agentLoop = AgentLoop(llmProvider, safetyGuard, prefs, screenCapture)
+
+        val harnessLlm = LlmHarnessAdapter(createLlmProvider(prefs))
+        harness = AgentHarness(
+            llm = { messages -> harnessLlm.complete(messages) },
+            tools = listOf(OpenAppTool(applicationContext, safetyGuard)),
+            tracker = TokenTracker(applicationContext.filesDir),
+            maxSteps = prefs.maxSteps.coerceAtLeast(1)
+        )
+
+        agentLoop = AgentLoop(safetyGuard, prefs, screenCapture)
         routineManager = RoutineManager(db.routineDao())
 
         // Observe agent state to update notification and persist task
@@ -77,6 +89,21 @@ class AgentService : Service() {
     }
 
     override fun onBind(intent: Intent): IBinder = binder
+
+    /**
+     * Route a user command through the AgentHarness: the local command parser
+     * short-circuits trivial commands (zero LLM tokens), everything else runs
+     * through the LLM tool-call loop with token usage tracking.
+     */
+    fun submitTask(input: String) {
+        val goal = input.trim()
+        if (goal.isEmpty() || !::harness.isInitialized) return
+        agentLoop.runWithHarness(goal, harness, serviceScope)
+    }
+
+    private fun createLlmProvider(prefs: SecurePreferences): LlmProvider =
+        runCatching { LlmProviderFactory.create(prefs) }
+            .getOrElse { OpenAIProvider(prefs.openAiApiKey, prefs.openAiModel, prefs.openAiBaseUrl) }
 
     override fun onDestroy() {
         super.onDestroy()

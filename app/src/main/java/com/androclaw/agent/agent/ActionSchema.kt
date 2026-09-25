@@ -56,6 +56,10 @@ sealed class AgentAction {
     }
 
     @Serializable
+    @SerialName("open_url")
+    data class OpenUrl(val url: String) : AgentAction()
+
+    @Serializable
     @SerialName("wait")
     data class Wait(val millis: Long = 1000) : AgentAction()
 }

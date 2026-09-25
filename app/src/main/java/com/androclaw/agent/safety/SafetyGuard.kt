@@ -45,6 +45,11 @@ class SafetyGuard(private val prefs: SecurePreferences) {
             return SafetyResult.Blocked(blockReason)
         }
 
+        // If unrestricted mode is enabled, skip all confirmation gates
+        if (prefs.unrestrictedMode) {
+            return SafetyResult.Allowed
+        }
+
         // First-use confirmation for non-allowlist apps
         if (!prefs.useAllowlist && pkg !in prefs.allowlistPackages && pkg !in sessionApprovedApps) {
             _pendingConfirmation.value = ConfirmationRequest(

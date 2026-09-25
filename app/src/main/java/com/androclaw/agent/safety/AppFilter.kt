@@ -16,6 +16,8 @@ class AppFilter(private val prefs: SecurePreferences) {
         if (packageName == "com.androclaw.agent" ||
             packageName == "com.androclaw.agent.debug") return false
 
+        if (prefs.unrestrictedMode) return true
+
         // Check blocklist first (always respected)
         if (packageName in prefs.blocklistPackages) return false
 
@@ -35,6 +37,8 @@ class AppFilter(private val prefs: SecurePreferences) {
             packageName == "com.androclaw.agent.debug") {
             return "Cannot operate within AndroClaw itself"
         }
+        if (prefs.unrestrictedMode) return null
+
         if (packageName in prefs.blocklistPackages) {
             return "App is in the blocklist"
         }

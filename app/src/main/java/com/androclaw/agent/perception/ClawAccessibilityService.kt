@@ -68,9 +68,11 @@ class ClawAccessibilityService : AccessibilityService() {
      * Build a fresh UI snapshot from the current windows.
      */
     fun buildSnapshot(): UiSnapshot {
-        val windows: List<AccessibilityWindowInfo> = windows ?: emptyList()
+        val windowsList: List<AccessibilityWindowInfo> = windows ?: emptyList()
+        val activeRoot = rootInActiveWindow
         return UiTreeBuilder.buildSnapshot(
-            windows = windows,
+            windows = windowsList,
+            activeRoot = activeRoot,
             packageName = currentPackage,
             activityName = currentActivity
         )
