@@ -64,3 +64,7 @@ AndroClaw has profound access to your device. By design, **it only communicates 
 ## Safety
 
 The agent passes on-screen text to the LLM on every step, including content from web pages and incoming messages. That text is **untrusted input** and could contain instructions designed to steer the agent's behavior (prompt injection). Confirmation gates and the allow/blocklist reduce this risk but do not eliminate it. We recommend testing in an emulator or with a throwaway account before using AndroClaw with sensitive apps or data.
+
+## License
+
+AndroClaw is released under the MIT License — see [LICENSE](LICENSE).
