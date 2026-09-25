@@ -34,8 +34,9 @@ Inspired by Mobilerun, AndroClaw requires **no per-app integrations**. It uses t
 
 ## Requirements
 
-- **Android**: Android 9.0 (API 28) or newer. The screenshot/vision fallback additionally requires Android 11 (API 30)+.
+- **Android**: Android 9.0 (API 28) or newer, building against SDK 35 (compileSdk/targetSdk 35). The screenshot/vision fallback additionally requires Android 11 (API 30)+.
 - **Android Studio**: Narwhal 3 Feature Drop (2025.1.3) or later — this project pins AGP 8.13.2 and Gradle 9.5.0.
+- **Kotlin**: 2.0.21.
 - **JDK**: 17 (the project compiles Java and Kotlin bytecode to 17).
 
 ## Usage Examples
