@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">AndroClaw</string>
+    <string name="accessibility_service_label">AndroClaw Agent</string>
+    <string name="accessibility_service_description">AndroClaw reads the screen to understand the UI and performs taps, swipes, and typing on your behalf to complete tasks you give it. It never sends screen content to external servers without your explicit configuration of an API key.</string>
+    <string name="accessibility_service_summary">AI-powered on-device automation agent</string>
+
+    <!-- Onboarding -->
+    <string name="onboarding_title">Welcome to AndroClaw</string>
+    <string name="onboarding_subtitle">Your on-device AI agent</string>
+    <string name="onboarding_what_it_sees">What AndroClaw sees</string>
+    <string name="onboarding_what_it_does">What AndroClaw can do</string>
+    <string name="onboarding_privacy">Your privacy</string>
+
+    <!-- Notifications -->
+    <string name="notification_channel_agent">Agent</string>
+    <string name="notification_channel_agent_desc">AndroClaw agent status</string>
+    <string name="notification_title_running">Agent running…</string>
+    <string name="notification_title_idle">Agent ready</string>
+    <string name="action_stop">Stop</string>
+
+    <!-- Settings -->
+    <string name="settings_title">Settings</string>
+    <string name="settings_provider">LLM Provider</string>
+    <string name="settings_model">Model Name</string>
+    <string name="settings_api_key">API Key</string>
+    <string name="settings_base_url">Base URL</string>
+    <string name="settings_confirmation_policies">Confirmation Policies</string>
+    <string name="settings_app_filter">App Allowlist / Blocklist</string>
+    <string name="settings_debug_mode">Debug Mode (log UI trees)</string>
+    <string name="settings_max_steps">Max Steps per Task</string>
+
+    <!-- Errors -->
+    <string name="error_accessibility_not_enabled">Please enable the AndroClaw accessibility service in Settings → Accessibility.</string>
+    <string name="error_no_api_key">No API key configured. Go to Settings to add one.</string>
+    <string name="error_task_failed">Task failed: </string>
+    <string name="error_max_steps">Reached maximum steps without completing the task.</string>
+
+    <!-- Actions -->
+    <string name="action_confirm">Confirm</string>
+    <string name="action_cancel">Cancel</string>
+    <string name="action_send">Send</string>
+    <string name="action_save">Save as Routine</string>
+    <string name="action_replay">Replay</string>
+
+    <!-- Confirmation dialog -->
+    <string name="confirm_title">Confirm Action</string>
+    <string name="confirm_sensitive">AndroClaw wants to perform a sensitive action:</string>
+
+    <!-- Chat -->
+    <string name="chat_hint">Type a task or tap mic…</string>
+    <string name="chat_thinking">Thinking…</string>
+    <string name="chat_planning">Planning steps…</string>
+    <string name="chat_done">Done ✓</string>
+    <string name="chat_failed">Failed ✗</string>
+    <string name="chat_stopped">Stopped by user</string>
+</resources>

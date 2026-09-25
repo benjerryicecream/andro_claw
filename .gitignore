@@ -1,0 +1,27 @@
+# Built files
+build/
+.app/
+
+# Gradle
+.gradle/
+local.properties
+*.iml
+.idea/
+*.iws
+*.ipr
+
+# Android secrets & config
+*.keystore
+*.jks
+google-services.json
+
+# macOS
+.DS_Store
+
+# Python helper scripts (optional — keep if wanted)
+# fix.py
+# fix_agentloop.py
+
+# Logs
+*.log
+log.txt
