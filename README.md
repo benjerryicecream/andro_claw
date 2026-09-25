@@ -30,6 +30,7 @@ Inspired by Mobilerun, AndroClaw requires **no per-app integrations**. It uses t
 3. Open **Settings** (gear icon) and configure your LLM provider.
    - For cloud models, enter your API key.
    - For self-hosted Ollama, point the Base URL at your server. From the Android Emulator, `http://10.0.2.2:11434` reaches Ollama running on the host machine.
+   - For a phone connected over USB, run `adb reverse tcp:11434 tcp:11434` on the host machine, then use `http://localhost:11434` as the Base URL in the app. This keeps the connection on localhost, which the app's network security config already permits — no LAN IP over plain HTTP needed.
 4. If the screenshot/vision fallback is used, grant the **MediaProjection / screenshot permission** when prompted — this must be re-granted on each new session; it is not a one-time grant.
 
 ## Requirements
