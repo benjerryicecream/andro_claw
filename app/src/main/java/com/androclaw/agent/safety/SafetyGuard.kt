@@ -30,7 +30,7 @@ class SafetyGuard(private val prefs: SecurePreferences) {
     private val sessionApprovedApps = mutableSetOf<String>()
 
     /**
- before executing each action.
+     * Called by the agent loop before executing each action.
      * Suspends until user confirms (if needed) or returns immediately if safe.
      * Returns false if the user cancelled or the action is blocked.
      */
