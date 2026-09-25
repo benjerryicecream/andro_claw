@@ -278,7 +278,7 @@ fun AgentStateCard(
                         Spacer(Modifier.width(8.dp))
                         Text(
                             text = when (state) {
-                                is AgentState.Planning -> "Planning..."
+                                is AgentState.Planning -> state.message ?: "Planning..."
                                 is AgentState.Executing -> "Step ${state.currentStep + 1}/${state.maxSteps}"
                                 is AgentState.Completed -> "Done ✓"
                                 is AgentState.Failed -> "Failed"

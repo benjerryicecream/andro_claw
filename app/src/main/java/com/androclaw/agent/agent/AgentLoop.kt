@@ -83,7 +83,21 @@ class AgentLoop(
                         Log.i(TAG, "Harness result indeterminate; feeding it as first observation and continuing goal in perceive-act loop")
                         val service = ClawAccessibilityService.instance.value
                         if (service != null) {
-                            withContext(Dispatchers.Main) { runLoop(goal, outcome.summary) }
+                            withContext(Dispatchers.Main) {
+                                outcome.openedPackage?.let { opened ->
+                                    waitForForegroundApp(goal, opened)
+                                    if (opened == "com.android.chrome") {
+                                        // Chrome may restore a fullscreen webpage whose address bar is
+                                        // not present in the a11y tree; deterministically present a
+                                        // fresh new tab so the address/search bar is guaranteed visible
+                                        // instead of relying on the LLM to recover (it pressed BACK and
+                                        // closed Chrome).
+                                        service.actionExecutor
+                                            .execute(AgentAction.OpenUrl("chrome://newtab"))
+                                    }
+                                }
+                                runLoop(goal, outcome.summary)
+                            }
                         } else {
                             _state.value = AgentState.Failed(
                                 goal, emptyList(),
@@ -127,6 +141,33 @@ class AgentLoop(
     fun reset() {
         stop()
         _state.value = AgentState.Idle
+    }
+
+    /**
+     * Wait (up to [timeoutMs]) for [targetPackage] to become the foreground app
+     * after a launch, polling the accessibility snapshot's packageName. Emits a
+     * "Waiting for…" status meanwhile. On timeout the caller proceeds anyway;
+     * SafetyGuard's block-on-AndroClaw-self rule remains the safety net.
+     */
+    private suspend fun waitForForegroundApp(
+        goal: String,
+        targetPackage: String,
+        timeoutMs: Long = 5000
+    ) {
+        val accessibilityService = ClawAccessibilityService.instance.value ?: return
+        _state.value = AgentState.Planning(goal, message = "Waiting for $targetPackage to open…")
+        val deadline = System.currentTimeMillis() + timeoutMs
+        while (System.currentTimeMillis() < deadline) {
+            if (!kotlinx.coroutines.currentCoroutineContext().isActive) break
+            val snapshot = accessibilityService.buildSnapshot()
+            if (snapshot.packageName == targetPackage) {
+                Log.i(TAG, "waitForForegroundApp: $targetPackage is foreground")
+                return
+            }
+            Log.d(TAG, "waitForForegroundApp: foreground=${snapshot.packageName}, waiting for $targetPackage")
+            delay(250L)
+        }
+        Log.w(TAG, "waitForForegroundApp: timed out waiting for $targetPackage to come to the foreground")
     }
 
     private suspend fun runLoop(goal: String, harnessResult: String? = null) {
@@ -266,6 +307,7 @@ class AgentLoop(
                         conversationHistory.add(LlmMessage("assistant", responseText))
 
                         if (prefs.debugMode) Log.d(TAG, "Step $stepIndex response: $responseText")
+                        Log.i(TAG, "Step ${stepIndex + 1} response: ${responseText.take(400)}")
 
                         // Parse response
                         val stepResponse = parseStepResponse(responseText)
@@ -330,6 +372,7 @@ class AgentLoop(
                                 // Execute the action
                                 val executor = accessibilityService.actionExecutor
                                 val executionResult = executor.execute(action)
+                                Log.i(TAG, "Step ${stepIndex + 1} executed $action → $executionResult")
 
                                 // Record the step
                                 val actionJson = try {
@@ -391,6 +434,7 @@ class AgentLoop(
         - {"action": "long_click", "node_id": 42}
         - {"action": "set_text", "node_id": 42, "text": "hello"}
         - {"action": "scroll", "node_id": 42, "direction": "down"}
+        - {"action": "press_enter"}  // submits the focused field (IME enter key or a Go/Search button)
         - {"action": "back"}
         - {"action": "home"}
         - {"action": "recents"}
@@ -407,12 +451,15 @@ class AgentLoop(
         
         STRATEGY FOR OPENING APPS & WEBPAGES:
         1. To open an app, use {"action": "open_app", "package_name": "com.android.chrome"} (or common name like "chrome", "maps", "youtube").
-        2. To navigate to a website in Chrome:
+        2. To navigate to a website or search in Chrome:
            - First open Chrome: {"action": "open_app", "package_name": "com.android.chrome"}.
            - Once Chrome is open, locate the address bar / search field in the UI tree (e.g. text or description like "Search or type URL", or ID like "url_bar", "search_box").
-           - Use {"action": "set_text", "node_id": <id>, "text": "https://example.com"} to type the URL into the address bar.
-        3. Do NOT press HOME or stop unless the task is completely finished.
-        4. Respond with {"status": "done"} ONLY when the user's task is fully completed on screen.
+           - Use {"action": "set_text", "node_id": <id>, "text": "weather in Hilo"} to type the query into the address bar.
+           - SUBMIT: immediately after any set_text into a search/address field, ALWAYS follow with {"action": "press_enter"} — or, if no enter key is found, {"action": "click"} a visible suggestion, Go, or Search button. Text sitting in a field is NEVER completion.
+        3. Do NOT press BACK, HOME, or RECENTS to "start over" or immediately after an app opens — the app was just opened for this goal and you are already on the correct screen. Proceed from the current screen.
+        4. SEARCH GOALS ONLY: if the goal asks to search (e.g. "search for ..."), the flow is always: address bar → set_text → press_enter → wait for results → done. Never substitute back/home/navigation for typing and submitting.
+        5. If the address/search bar is NOT in the UI tree on a webpage, the toolbar may be auto-hidden in fullscreen — tap the very top of the screen or scroll up to reveal it. Do NOT press back: back from the only open tab closes the browser.
+        6. DONE CRITERIA: respond with {"status": "done"} ONLY when the goal's visible outcome is actually on screen — for a search, the search results must be visible (allow time for the page to load; use {"action": "wait", "millis": 2000} and re-observe if needed). A typed-but-unsubmitted query, a still-loading page, or an open app alone is NOT done.
     """.trimIndent()
 
     private fun buildUserMessage(
@@ -532,6 +579,7 @@ class AgentLoop(
                     val url = obj["url"]?.jsonPrimitive?.content ?: return null
                     AgentAction.OpenUrl(url)
                 }
+                "press_enter" -> AgentAction.PressEnter
                 "wait" -> {
                     val millis = obj["millis"]?.jsonPrimitive?.content?.toLongOrNull() ?: 1000L
                     AgentAction.Wait(millis)

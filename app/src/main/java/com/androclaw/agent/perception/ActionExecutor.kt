@@ -9,6 +9,7 @@ import android.net.Uri
 import android.os.Bundle
 import android.os.SystemClock
 import android.view.accessibility.AccessibilityNodeInfo
+import android.view.accessibility.AccessibilityWindowInfo
 import com.androclaw.agent.agent.AgentAction
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -24,6 +25,10 @@ class ActionExecutor(
         private const val UI_SETTLE_POLL_MS = 200L
         private const val UI_SETTLE_TIMEOUT_MS = 1500L
         private const val UI_SETTLE_STABLE_COUNT = 2
+
+        private val SUBMIT_LABELS = setOf(
+            "enter", "go", "search", "done", "send", "submit", "next", "ok", "return", "arrow"
+        )
     }
 
     /**
@@ -49,6 +54,7 @@ class ActionExecutor(
             }
             is AgentAction.OpenApp -> executeOpenApp(action.packageName)
             is AgentAction.OpenUrl -> executeOpenUrl(action.url)
+            is AgentAction.PressEnter -> executePressEnter()
             is AgentAction.Wait -> {
                 delay(action.millis)
                 "Waited ${action.millis}ms"
@@ -105,6 +111,57 @@ class ActionExecutor(
         } else {
             "Failed: set_text on node $nodeId not supported"
         }
+    }
+
+    private fun executePressEnter(): String {
+        // 1) Prefer the IME keyboard's enter/search key (separate accessibility window).
+        val imeKey = service.windows.asSequence()
+            .filter { it.type == AccessibilityWindowInfo.TYPE_INPUT_METHOD }
+            .mapNotNull { it.root }
+            .mapNotNull { findSubmitNode(it) }
+            .firstOrNull()
+        if (imeKey != null && imeKey.performAction(AccessibilityNodeInfo.ACTION_CLICK)) {
+            return "Pressed IME ${imeKey.contentDescription ?: "enter"} key"
+        }
+
+        // 2) Fall back to a submit/Go/Search button in the app's own window tree.
+        service.rootInActiveWindow?.let { root ->
+            findSubmitNode(root)?.let { node ->
+                if (node.performAction(AccessibilityNodeInfo.ACTION_CLICK)) {
+                    return "Pressed ${node.contentDescription ?: "submit"} button"
+                }
+            }
+        }
+
+        return "Failed: press_enter — no enter/search key found; tap a visible suggestion or Go button instead"
+    }
+
+    /** Depth-first search for a clickable node whose label reads as a submit key. */
+    private fun findSubmitNode(root: AccessibilityNodeInfo): AccessibilityNodeInfo? {
+        fun isSubmit(node: AccessibilityNodeInfo, contain: Boolean): Boolean {
+            val label = (node.text ?: node.contentDescription)?.toString()?.trim()?.lowercase().orEmpty()
+            val keyMatch = if (contain) {
+                SUBMIT_LABELS.any { label.contains(it) }
+            } else {
+                label in SUBMIT_LABELS
+            }
+            if (!keyMatch) return false
+            return node.isClickable ||
+                node.actionList.any { it.id == AccessibilityNodeInfo.AccessibilityAction.ACTION_CLICK.id }
+        }
+
+        fun dfs(contain: Boolean): AccessibilityNodeInfo? {
+            val queue = ArrayDeque<AccessibilityNodeInfo>()
+            queue.add(root)
+            while (queue.isNotEmpty()) {
+                val node = queue.removeFirst()
+                if (isSubmit(node, contain)) return node
+                for (i in 0 until node.childCount) node.getChild(i)?.let { queue.add(it) }
+            }
+            return null
+        }
+
+        return dfs(contain = false) ?: dfs(contain = true)
     }
 
     private fun executeScroll(nodeId: Int, direction: String): String {

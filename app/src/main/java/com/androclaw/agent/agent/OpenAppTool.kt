@@ -31,7 +31,13 @@ class OpenAppTool(
     override val description: String =
         "Open an installed app by its name, e.g. \"chrome\", \"maps\", \"calculator\""
 
+    @Volatile
+    private var lastOpened: String? = null
+
+    override fun lastOpenedPackage(): String? = lastOpened
+
     override fun execute(args: Map<String, String>): String {
+        lastOpened = null
         val rawQuery = args["query"]?.trim().orEmpty()
         if (rawQuery.isEmpty()) return "error: no app query provided"
 
@@ -66,6 +72,7 @@ class OpenAppTool(
 
         val result = try {
             context.startActivity(launchIntent)
+            lastOpened = packageName
             "Opened $label ($packageName)"
         } catch (e: Exception) {
             "error: could not open $label: ${e.message}"

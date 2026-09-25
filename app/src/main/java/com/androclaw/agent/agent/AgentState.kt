@@ -7,7 +7,7 @@ import com.androclaw.agent.data.StepRecord
  */
 sealed class AgentState {
     object Idle : AgentState()
-    data class Planning(val goal: String) : AgentState()
+    data class Planning(val goal: String, val message: String? = null) : AgentState()
     data class Executing(
         val goal: String,
         val steps: List<StepRecord>,

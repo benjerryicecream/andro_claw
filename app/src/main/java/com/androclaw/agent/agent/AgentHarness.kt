@@ -20,6 +20,9 @@ interface AgentTool {
     val name: String
     val description: String
     fun execute(args: Map<String, String>): String
+
+    /** Package brought to the foreground by the most recent [execute], or null. */
+    fun lastOpenedPackage(): String? = null
 }
 
 object CommandParser {
@@ -71,6 +74,9 @@ class AgentHarness(
     private val llmSource: String = "unknown"
 ) {
 
+    /** Package brought to the foreground by this task's most recent tool call. */
+    private var currentOpenedPackage: String? = null
+
     /**
      * Result of a harness task. [Completed] results provably finished the goal
      * (CommandParser fast path or confirmed by the decision backend); [Continue]
@@ -79,7 +85,7 @@ class AgentHarness(
      */
     sealed interface Outcome {
         data class Completed(val summary: String) : Outcome
-        data class Continue(val summary: String) : Outcome
+        data class Continue(val summary: String, val openedPackage: String? = null) : Outcome
         data class Failed(val summary: String) : Outcome
     }
 
@@ -99,6 +105,7 @@ class AgentHarness(
 
     suspend fun runTask(userInput: String): Outcome {
         val taskId = "task-${System.currentTimeMillis()}"
+        currentOpenedPackage = null
 
         CommandParser.parseLocal(userInput)?.let { call ->
             val result = tools.find { it.name == call.name }?.execute(call.args)
@@ -142,8 +149,8 @@ class AgentHarness(
                             else -> false
                         }
                         if (canExecute) {
-                            decidedByBackend = executeChosenTool(
-                                taskId, step, toolChoice.choice, messages
+                            decidedByBackend = executeToolStep(
+                                taskId, step, toolChoice.choice, internalArgs(taskId, step), messages
                             )
                         }
                     }
@@ -167,18 +174,18 @@ class AgentHarness(
                 label = call?.name ?: "none",
                 source = llmSource
             )
-            if (call == null) {
+if (call == null) {
                 tracker.log(taskId, userInput, usage, "llm-done")
                 val harnessSteps = messages.filter { it.role == "tool" }
                     .takeLast(3)
-                    .joinToString("\n") { it.content }
-                return Outcome.Continue(harnessSteps.ifBlank { resp.text })
+                    .joinToString("\n") { it.content.substringAfter("returned: ", it.content) }
+                return Outcome.Continue(
+                    summary = harnessSteps.ifBlank { resp.text },
+                    openedPackage = currentOpenedPackage
+                )
             }
             val execArgs = call.args + internalArgs(taskId, step)
-            val result = tools.find { it.name == call.name }?.execute(execArgs)
-                ?: "error: unknown tool '${call.name}'"
-            messages += ChatMessage("assistant", resp.text)
-            messages += ChatMessage("tool", "Step ${step + 1} — tool '${call.name}' returned: $result")
+            executeToolStep(taskId, step, call.name, execArgs, messages)
         }
         tracker.log(taskId, userInput, usage, "llm-max-steps")
         return Outcome.Failed("Stopped after $maxSteps steps without finishing.")
@@ -214,15 +221,21 @@ class AgentHarness(
         INTERNAL_STEP to step.toString()
     )
 
-    /** Execute a tool chosen by the decision backend (no LLM args available). */
-    private fun executeChosenTool(
+    /** Execute a tool and record its result in [messages]; tracks any app it foregrounded. */
+    private fun executeToolStep(
         taskId: String,
         step: Int,
         name: String,
+        args: Map<String, String>,
         messages: MutableList<ChatMessage>
     ): Boolean {
-        val tool = tools.find { it.name == name } ?: return false
-        val result = tool.execute(internalArgs(taskId, step))
+        val tool = tools.find { it.name == name } ?: run {
+            messages += ChatMessage("tool", "Step ${step + 1} — tool '$name' returned: error: unknown tool '$name'")
+            return false
+        }
+        val result = tool.execute(args)
+        val opened = tool.lastOpenedPackage()
+        if (opened != null) currentOpenedPackage = opened
         messages += ChatMessage("tool", "Step ${step + 1} — tool '$name' returned: $result")
         return true
     }
