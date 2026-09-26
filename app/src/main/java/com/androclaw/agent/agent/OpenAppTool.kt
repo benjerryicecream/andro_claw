@@ -153,6 +153,23 @@ class OpenAppTool(
                 scored.add(AppCandidate(pkg, label, score))
             }
         }
+
+        // Package-shaped queries (e.g. a hallucinated "ai.muse.app") that matched
+        // nothing: any token embedded in a candidate's package or label is enough.
+        if (scored.isEmpty() && query.contains(".")) {
+            val tokens = query.split(".").filter { it.length > 2 && it != "app" }
+            if (tokens.isNotEmpty()) {
+                for (activity in installed) {
+                    val pkg = activity.activityInfo.packageName
+                    if (!seen.add(pkg)) continue
+                    val label = (activity.loadLabel(pm)?.toString() ?: pkg).lowercase()
+                    if (tokens.any { pkg.contains(it) || label.contains(it) }) {
+                        scored.add(AppCandidate(pkg, label, 6))
+                    }
+                }
+            }
+        }
+
         scored.sortWith(compareByDescending<AppCandidate> { it.score }.thenBy { it.packageName })
         return scored
     }

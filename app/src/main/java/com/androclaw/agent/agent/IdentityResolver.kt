@@ -101,7 +101,10 @@ object IdentityResolver {
     const val MUSE_LAYOUT_GUIDANCE: String =
         "Muse layout: the main chat with Sebastian is the default view when the app opens; " +
             "side chats are separate threads — leave them alone. " +
-            "To message, type in the main chat's input field and send."
+            "To message, type in the main chat's input field and send. " +
+            "The Muse app IS installed: its launcher label is exactly \"Muse\" and its package is " +
+            "com.facebook.aura. Use open_app with package \"com.facebook.aura\" or name \"muse\"; " +
+            "never invent a package that is not on the device."
 
     /** The clarification question To show when the recipient is unknown. */
     fun askChannelQuestion(name: String): String =

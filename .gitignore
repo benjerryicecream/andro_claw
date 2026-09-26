@@ -25,3 +25,8 @@ google-services.json
 # Logs
 *.log
 log.txt
+
+# Generated artifacts / private data
+.kotlin/
+laya_training.jsonl
+token_usage.jsonl

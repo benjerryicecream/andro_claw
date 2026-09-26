@@ -78,6 +78,7 @@ class ChatViewModel : ViewModel() {
         // Observe accessibility service state
         viewModelScope.launch {
             ClawAccessibilityService.instance.collect { svc ->
+                android.util.Log.i("ChatViewModel", "a11y instance -> ${svc != null}")
                 _uiState.value = _uiState.value.copy(isAccessibilityEnabled = svc != null)
             }
         }

@@ -8,6 +8,7 @@ import android.graphics.Rect
 import android.net.Uri
 import android.os.Bundle
 import android.os.SystemClock
+import android.util.Log
 import android.view.accessibility.AccessibilityNodeInfo
 import android.view.accessibility.AccessibilityWindowInfo
 import com.androclaw.agent.agent.AgentAction
@@ -22,6 +23,7 @@ class ActionExecutor(
     private val service: AccessibilityService
 ) {
     companion object {
+        private const val TAG = "ActionExecutor"
         private const val UI_SETTLE_POLL_MS = 200L
         private const val UI_SETTLE_TIMEOUT_MS = 1500L
         private const val UI_SETTLE_STABLE_COUNT = 2
@@ -35,30 +37,36 @@ class ActionExecutor(
      * Execute an action and return a description of what happened.
      */
     suspend fun execute(action: AgentAction): String = withContext(Dispatchers.Main) {
-        when (action) {
-            is AgentAction.Click -> executeClick(action.nodeId)
-            is AgentAction.LongClick -> executeLongClick(action.nodeId)
-            is AgentAction.SetText -> executeSetText(action.nodeId, action.text)
-            is AgentAction.Scroll -> executeScroll(action.nodeId, action.direction)
-            is AgentAction.Back -> {
-                service.performGlobalAction(AccessibilityService.GLOBAL_ACTION_BACK)
-                "Pressed BACK"
+        Log.i(TAG, "execute entry: $action on ${Thread.currentThread().name}")
+        try {
+            when (action) {
+                is AgentAction.Click -> executeClick(action.nodeId)
+                is AgentAction.LongClick -> executeLongClick(action.nodeId)
+                is AgentAction.SetText -> executeSetText(action.nodeId, action.text)
+                is AgentAction.Scroll -> executeScroll(action.nodeId, action.direction)
+                is AgentAction.Back -> {
+                    service.performGlobalAction(AccessibilityService.GLOBAL_ACTION_BACK)
+                    "Pressed BACK"
+                }
+                is AgentAction.Home -> {
+                    service.performGlobalAction(AccessibilityService.GLOBAL_ACTION_HOME)
+                    "Pressed HOME"
+                }
+                is AgentAction.Recents -> {
+                    service.performGlobalAction(AccessibilityService.GLOBAL_ACTION_RECENTS)
+                    "Opened RECENTS"
+                }
+                is AgentAction.OpenApp -> executeOpenApp(action.packageName)
+                is AgentAction.OpenUrl -> executeOpenUrl(action.url)
+                is AgentAction.PressEnter -> executePressEnter()
+                is AgentAction.Wait -> {
+                    delay(action.millis)
+                    "Waited ${action.millis}ms"
+                }
             }
-            is AgentAction.Home -> {
-                service.performGlobalAction(AccessibilityService.GLOBAL_ACTION_HOME)
-                "Pressed HOME"
-            }
-            is AgentAction.Recents -> {
-                service.performGlobalAction(AccessibilityService.GLOBAL_ACTION_RECENTS)
-                "Opened RECENTS"
-            }
-            is AgentAction.OpenApp -> executeOpenApp(action.packageName)
-            is AgentAction.OpenUrl -> executeOpenUrl(action.url)
-            is AgentAction.PressEnter -> executePressEnter()
-            is AgentAction.Wait -> {
-                delay(action.millis)
-                "Waited ${action.millis}ms"
-            }
+        } catch (e: Exception) {
+            Log.w(TAG, "execute threw", e)
+            "error: ${e.message}"
         }
     }
 
@@ -89,27 +97,65 @@ class ActionExecutor(
     }
 
     private fun executeSetText(nodeId: Int, text: String): String {
-        val node = UiTreeBuilder.getNodeById(nodeId)
+        val registered = UiTreeBuilder.getNodeById(nodeId)
             ?: return "Failed: node $nodeId not found"
-        // Focus the field first
+
+        // Re-resolve against the live tree: the registry holds references from the
+        // last observation, but the keyboard animation can churn the tree between
+        // that observation and this action. Screen bounds are stable across
+        // rebuilds; opaque node ids are not.
+        val bounds = Rect()
+        registered.getBoundsInScreen(bounds)
+        val node = findEditableNode(bounds) ?: registered
+
+        if (!node.isEditable) {
+            val cls = node.className
+            Log.w(TAG, "set_text node=$nodeId is not editable (cls=$cls res=${node.viewIdResourceName} bounds=$bounds)")
+            return "Failed: node $nodeId is not an editable field ($cls)"
+        }
+
+        // Request focus explicitly and VERIFY the live state, retrying once. Some
+        // chat inputs ignore ACTION_FOCUS until the IME is attached; the check
+        // must read a freshly-fetched node, not the pre-focus registry instance.
         node.performAction(AccessibilityNodeInfo.ACTION_FOCUS)
-        // Clear existing text by setting selection to full range
+        var live = findEditableNode(bounds) ?: node
+        var focusOk = live.isFocused
+        if (!focusOk) {
+            node.performAction(AccessibilityNodeInfo.ACTION_FOCUS)
+            SystemClock.sleep(250)
+            live = findEditableNode(bounds) ?: node
+            focusOk = live.isFocused
+        }
+        val focusState = if (focusOk) "focused" else "field not reporting focus"
+
+        // Clear existing text (selection = full range), then write the new text on
+        // the freshest node we have.
         val clearArgs = Bundle().apply {
             putInt(AccessibilityNodeInfo.ACTION_ARGUMENT_SELECTION_START_INT, 0)
-            putInt(
-                AccessibilityNodeInfo.ACTION_ARGUMENT_SELECTION_END_INT,
-                node.text?.length ?: 0
-            )
+            putInt(AccessibilityNodeInfo.ACTION_ARGUMENT_SELECTION_END_INT, live.text?.length ?: 0)
         }
-        node.performAction(AccessibilityNodeInfo.ACTION_SET_SELECTION, clearArgs)
-        // Set new text
+        live.performAction(AccessibilityNodeInfo.ACTION_SET_SELECTION, clearArgs)
         val args = Bundle().apply {
             putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, text)
         }
-        return if (node.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args)) {
-            "Set text on node $nodeId: \"$text\""
+        val setOk = live.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args)
+
+        // Post-typing confirmation: is a send/submit target exposed now?
+        val sendTargets = describeSubmitNodes()
+        Log.i(
+            TAG,
+            "set_text node=$nodeId cls=${live.className} res=${live.viewIdResourceName} " +
+                "editable=${live.isEditable} supportsSetText=${live.actionList.any { it.id == AccessibilityNodeInfo.AccessibilityAction.ACTION_SET_TEXT.id }} " +
+                "$focusState setOk=$setOk pkg=${service.rootInActiveWindow?.packageName} submit_nodes=[$sendTargets]"
+        )
+
+        val result =
+            if (setOk) "Set text on node $nodeId: \"$text\"" else "Failed: set_text on node $nodeId not supported"
+        return if (sendTargets.isNotBlank()) {
+            "$result [$focusState; send button: $sendTargets]"
         } else {
-            "Failed: set_text on node $nodeId not supported"
+            Log.w(TAG, "set_text done but NO send/submit node is visible after typing")
+            "$result [$focusState; NO send button visible — tap a send button or IME key]"
         }
     }
 
@@ -133,7 +179,65 @@ class ActionExecutor(
             }
         }
 
-        return "Failed: press_enter — no enter/search key found; tap a visible suggestion or Go button instead"
+        return run {
+            val candidates = describeSubmitNodes()
+            Log.w(TAG, "press_enter failed; visible submit-ish labels=[$candidates]")
+            "Failed: press_enter — no enter/search key found; tap a visible suggestion or Go button instead (visible: [${candidates.ifBlank { "none" }}])"
+        }
+    }
+
+    /**
+     * Human-readable list of clickable nodes whose labels read as a submit key,
+     * across the IME window and the app's own window. Scanned fresh so "the send
+     * button exists but wasn't exposed when we looked" is confirmable in logs.
+     */
+    private fun describeSubmitNodes(): String {
+        val found = LinkedHashSet<String>()
+        for (win in service.windows) win.root?.let { collectSubmitLabels(it, found) }
+        service.rootInActiveWindow?.let { collectSubmitLabels(it, found) }
+        return found.joinToString(", ")
+    }
+
+    private fun collectSubmitLabels(node: AccessibilityNodeInfo, out: MutableSet<String>) {
+        val label = (node.text ?: node.contentDescription)?.toString()?.trim().orEmpty()
+        if (node.isClickable && label.isNotBlank()) {
+            val lower = label.lowercase()
+            if (SUBMIT_LABELS.any { lower == it || lower.contains(it) }) out.add(label)
+        }
+        for (i in 0 until node.childCount) node.getChild(i)?.let { collectSubmitLabels(it, out) }
+    }
+
+    /** All window roots currently exposed to the a11y service. */
+    private fun liveRoots(): List<AccessibilityNodeInfo> {
+        val roots = mutableListOf<AccessibilityNodeInfo>()
+        service.windows.forEach { win -> win.root?.let { roots.add(it) } }
+        if (roots.isEmpty()) service.rootInActiveWindow?.let { roots.add(it) }
+        return roots
+    }
+
+    /**
+     * The node at [bounds] in the CURRENT tree, preferring an editable field.
+     * Returns null when nothing is at that location anymore.
+     */
+    private fun findEditableNode(bounds: Rect): AccessibilityNodeInfo? {
+        val hits = mutableListOf<Pair<AccessibilityNodeInfo, Int>>()
+        for (root in liveRoots()) collectNodesAt(root, bounds, 0, hits)
+        return hits.firstOrNull { it.first.isEditable }?.first
+    }
+
+    private fun collectNodesAt(
+        node: AccessibilityNodeInfo,
+        bounds: Rect,
+        depth: Int,
+        out: MutableList<Pair<AccessibilityNodeInfo, Int>>
+    ) {
+        if (depth > 20) return
+        val b = Rect()
+        node.getBoundsInScreen(b)
+        if (b.contains(bounds.centerX(), bounds.centerY())) out.add(node to depth)
+        for (i in 0 until node.childCount) {
+            node.getChild(i)?.let { collectNodesAt(it, bounds, depth + 1, out) }
+        }
     }
 
     /** Depth-first search for a clickable node whose label reads as a submit key. */

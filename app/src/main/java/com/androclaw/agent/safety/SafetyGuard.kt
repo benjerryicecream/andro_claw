@@ -1,5 +1,6 @@
 package com.androclaw.agent.safety
 
+import android.util.Log
 import com.androclaw.agent.agent.AgentAction
 import com.androclaw.agent.data.SecurePreferences
 import com.androclaw.agent.perception.UiSnapshot
@@ -41,17 +42,21 @@ class SafetyGuard(private val prefs: SecurePreferences) {
         // Check app filter
         val pkg = snapshot.packageName
         val blockReason = appFilter.blockReason(pkg)
+        Log.i(TAG, "checkAndConfirm action=$action pkg=$pkg unrestricted=${prefs.unrestrictedMode} block=$blockReason")
         if (blockReason != null) {
+            Log.i(TAG, "-> Blocked: $blockReason")
             return SafetyResult.Blocked(blockReason)
         }
 
         // If unrestricted mode is enabled, skip all confirmation gates
         if (prefs.unrestrictedMode) {
+            Log.i(TAG, "-> Allowed (unrestricted)")
             return SafetyResult.Allowed
         }
 
         // First-use confirmation for non-allowlist apps
         if (!prefs.useAllowlist && pkg !in prefs.allowlistPackages && pkg !in sessionApprovedApps) {
+            Log.i(TAG, "-> awaiting first-use confirmation for $pkg")
             _pendingConfirmation.value = ConfirmationRequest(
                 action = AgentAction.Wait(0),
                 category = SensitiveCategory.APP_FIRST_USE,
@@ -59,6 +64,7 @@ class SafetyGuard(private val prefs: SecurePreferences) {
                 packageName = pkg
             )
             val confirmed = confirmationResults.first()
+            Log.i(TAG, "-> first-use confirmed=$confirmed")
             _pendingConfirmation.value = null
             if (confirmed) {
                 sessionApprovedApps.add(pkg)
@@ -90,6 +96,7 @@ class SafetyGuard(private val prefs: SecurePreferences) {
 
         val category = confirmationPolicy.requiresConfirmation(action, context)
         if (category != null) {
+            Log.i(TAG, "-> awaiting confirmation for category=$category")
             _pendingConfirmation.value = ConfirmationRequest(
                 action = action,
                 category = category,
@@ -97,10 +104,12 @@ class SafetyGuard(private val prefs: SecurePreferences) {
                 packageName = pkg
             )
             val confirmed = confirmationResults.first()
+            Log.i(TAG, "-> confirmation confirmed=$confirmed")
             _pendingConfirmation.value = null
             return if (confirmed) SafetyResult.Allowed else SafetyResult.Cancelled
         }
 
+        Log.i(TAG, "-> Allowed (no category)")
         return SafetyResult.Allowed
     }
 
@@ -112,6 +121,10 @@ class SafetyGuard(private val prefs: SecurePreferences) {
     /** Called from UI when user taps Cancel in the dialog. */
     fun cancel() {
         confirmationResults.tryEmit(false)
+    }
+
+    companion object {
+        private const val TAG = "SafetyGuard"
     }
 }
 

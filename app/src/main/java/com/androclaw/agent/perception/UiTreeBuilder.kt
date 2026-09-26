@@ -36,6 +36,9 @@ object UiTreeBuilder {
 
         for (window in windows) {
             if (totalNodes >= MAX_NODES) break
+            // The IME keyboard is not part of the app UI: it must never feed the
+            // snapshot the LLM plans from (it turns typing targets into keys).
+            if (window.type == AccessibilityWindowInfo.TYPE_INPUT_METHOD) continue
             val root = window.root ?: continue
             try {
                 val node = buildNode(root, 0, totalNodes)

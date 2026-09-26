@@ -733,7 +733,15 @@ class AgentLoop(
                                     }
 
                                 // Safety check
-                                val safetyResult = safetyGuard.checkAndConfirm(action, snapshot)
+                                Log.i(TAG, "Step ${stepIndex + 1} safety check: $action (pkg=${snapshot.packageName})")
+                                val safetySnapshot = if (action is AgentAction.OpenApp) {
+                                    UiSnapshot(
+                                        packageName = action.packageName,
+                                        activityName = "",
+                                        nodes = snapshot.nodes
+                                    )
+                                } else snapshot
+                                val safetyResult = safetyGuard.checkAndConfirm(action, safetySnapshot)
                                 when (safetyResult) {
                                     is SafetyResult.Blocked -> {
                                         _state.value = AgentState.Failed(
@@ -750,6 +758,7 @@ class AgentLoop(
 
                                 // Execute the action
                                 val executor = accessibilityService.actionExecutor
+                                Log.i(TAG, "Step ${stepIndex + 1} executing $action")
                                 val executionResult = executor.execute(action)
                                 Log.i(TAG, "Step ${stepIndex + 1} executed $action → $executionResult")
 

@@ -2,6 +2,7 @@ package com.androclaw.agent.perception
 
 import android.accessibilityservice.AccessibilityService
 import android.accessibilityservice.AccessibilityServiceInfo
+import android.util.Log
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
 import android.view.accessibility.AccessibilityWindowInfo
@@ -17,6 +18,7 @@ import kotlinx.coroutines.flow.asStateFlow
 class ClawAccessibilityService : AccessibilityService() {
 
     companion object {
+        private const val TAG = "ClawAccessibilityService"
         private val _instance = MutableStateFlow<ClawAccessibilityService?>(null)
         val instance: StateFlow<ClawAccessibilityService?> = _instance.asStateFlow()
 
@@ -33,6 +35,7 @@ class ClawAccessibilityService : AccessibilityService() {
         super.onServiceConnected()
         actionExecutor = ActionExecutor(this)
         _instance.value = this
+        Log.i(TAG, "onServiceConnected pid=${android.os.Process.myPid()} actionExecutor=${actionExecutor != null}")
 
         // Configure dynamically for all apps
         val info = AccessibilityServiceInfo().apply {
@@ -47,21 +50,29 @@ class ClawAccessibilityService : AccessibilityService() {
         serviceInfo = info
     }
 
+    private var eventCount = 0
+
     override fun onAccessibilityEvent(event: AccessibilityEvent) {
         event.packageName?.toString()?.let { currentPackage = it }
         // Track activity from window state changed events
         if (event.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
             event.className?.toString()?.let { currentActivity = it }
         }
+        eventCount++
+        if (eventCount % 25 == 0) {
+            Log.d(TAG, "events=$eventCount lastPkg=$currentPackage")
+        }
     }
 
     override fun onInterrupt() {
+        Log.w(TAG, "onInterrupt")
         // No-op; agent loop checks isEnabled
     }
 
     override fun onDestroy() {
         super.onDestroy()
         _instance.value = null
+        Log.w(TAG, "onDestroy pid=${android.os.Process.myPid()}")
     }
 
     /**
@@ -70,11 +81,23 @@ class ClawAccessibilityService : AccessibilityService() {
     fun buildSnapshot(): UiSnapshot {
         val windowsList: List<AccessibilityWindowInfo> = windows ?: emptyList()
         val activeRoot = rootInActiveWindow
+        // Prefer the app window over rootInActiveWindow: the "active" window is
+        // the IME whenever the keyboard is focused, which would mislabel the
+        // snapshot and replace the app tree with keyboard keys.
+        val appWindow = windowsList.firstOrNull {
+            it.type == AccessibilityWindowInfo.TYPE_APPLICATION
+        }
+        val appRoot = appWindow?.root
+        val pkg = appRoot?.packageName?.toString()?.takeIf { it.isNotBlank() }
+            ?: currentPackage
+        val activity = if (appWindow != null && !pkg.startsWith("com.google.android.inputmethod")) {
+            pkg
+        } else currentActivity
         return UiTreeBuilder.buildSnapshot(
             windows = windowsList,
             activeRoot = activeRoot,
-            packageName = currentPackage,
-            activityName = currentActivity
+            packageName = pkg,
+            activityName = activity
         )
     }
 
