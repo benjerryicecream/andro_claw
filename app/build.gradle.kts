@@ -43,6 +43,15 @@ android {
         jvmTarget = "17"
     }
 
+    testOptions {
+        unitTests.all {
+            it.testLogging {
+                events("passed", "failed", "skipped", "standardOut", "standardError")
+                showStandardStreams = true
+            }
+        }
+    }
+
     buildFeatures {
         compose = true
         buildConfig = true
@@ -95,4 +104,8 @@ dependencies {
     implementation(libs.coil.compose)
 
     debugImplementation(libs.androidx.ui.tooling)
+
+    // JVM unit tests: command-plan parse corpus scoring (structured planner gate).
+    testImplementation("junit:junit:4.13.2")
+    testImplementation("org.json:json:20240303")
 }

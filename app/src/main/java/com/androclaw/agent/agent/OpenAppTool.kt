@@ -3,6 +3,7 @@ package com.androclaw.agent.agent
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import com.androclaw.agent.perception.UiSnapshot
 import com.androclaw.agent.safety.SafetyGuard
 import com.androclaw.agent.safety.SafetyResult
@@ -42,6 +43,24 @@ class OpenAppTool(
         if (rawQuery.isEmpty()) return "error: no app query provided"
 
         val query = normalize(rawQuery)
+
+        // A target that names a website ("youtube") opens in the browser, not as
+        // an installed app: the site is the home for what the user asked.
+        SiteCatalog.urlFor(query)?.let { url ->
+            lastOpened = null
+            val snapshot = UiSnapshot(packageName = "com.android.chrome", activityName = "", nodes = emptyList())
+            when (val safety = runBlocking {
+                safetyGuard.checkAndConfirm(AgentAction.OpenUrl(url), snapshot)
+            }) {
+                is SafetyResult.Blocked -> return "error: blocked — ${safety.reason} ($url)"
+                is SafetyResult.Cancelled -> return "cancelled: user declined to open $url"
+                is SafetyResult.Allowed -> { /* proceed */ }
+            }
+            val opened = openSite(url)
+            lastOpened = if (opened) UrlOpenedPackage else null
+            return if (opened) "Opened $url in Chrome ($UrlOpenedPackage)" else "error: could not open $url in a browser"
+        }
+
         val candidates = resolveCandidates(query)
         if (candidates.isEmpty()) return "error: no app matching '$rawQuery'"
 
@@ -94,6 +113,25 @@ class OpenAppTool(
             )
         }
         return result
+    }
+
+    /** Open [url] in Chrome when available, otherwise the default browser. */
+    private fun openSite(url: String): Boolean {
+        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        val launched = try {
+            intent.setPackage(CHROME_PACKAGE)
+            context.startActivity(intent)
+            true
+        } catch (e: Exception) {
+            try {
+                intent.setPackage(null)
+                context.startActivity(intent)
+                true
+            } catch (e2: Exception) {
+                false
+            }
+        }
+        return launched
     }
 
     /** Ask the decision backend which of the top candidates to open. */
@@ -205,5 +243,9 @@ class OpenAppTool(
         private const val PERFECT_SCORE = 10
         private const val MAX_CANDIDATES = 5
         private const val DECISION_EXECUTE_CONFIDENCE = 0.85
+        private const val CHROME_PACKAGE = "com.android.chrome"
+
+        /** Package the harness associates with a site opened in the browser. */
+        const val UrlOpenedPackage = "com.android.chrome"
     }
 }

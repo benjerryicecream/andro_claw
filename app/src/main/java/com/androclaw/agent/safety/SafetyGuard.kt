@@ -113,6 +113,35 @@ class SafetyGuard(private val prefs: SecurePreferences) {
         return SafetyResult.Allowed
     }
 
+    /**
+     * Direct sensitive-action confirmation, surfaced by the structured planner's
+     * needs_confirmation flag. Bypasses policy classification (the planner already
+     * judged the action sensitive) but reuses the same pending-confirmation
+     * dialog path as [checkAndConfirm]. Unrestricted mode skips the prompt.
+     * Suspends until the user answers; true = confirmed, false = cancelled.
+     */
+    suspend fun requireConfirmation(
+        category: SensitiveCategory,
+        nodeLabel: String,
+        packageName: String
+    ): Boolean {
+        if (prefs.unrestrictedMode) {
+            Log.i(TAG, "requireConfirmation skipped (unrestricted)")
+            return true
+        }
+        Log.i(TAG, "requireConfirmation awaiting category=$category label=\"$nodeLabel\"")
+        _pendingConfirmation.value = ConfirmationRequest(
+            action = AgentAction.Wait(0),
+            category = category,
+            nodeLabel = nodeLabel,
+            packageName = packageName
+        )
+        val confirmed = confirmationResults.first()
+        Log.i(TAG, "requireConfirmation confirmed=$confirmed")
+        _pendingConfirmation.value = null
+        return confirmed
+    }
+
     /** Called from UI when user taps Confirm in the dialog. */
     fun confirm() {
         confirmationResults.tryEmit(true)

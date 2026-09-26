@@ -100,6 +100,10 @@ class SecurePreferences(context: Context) {
         get() = securePrefs.getBoolean(KEY_CONFIRM_PAYMENTS, true)
         set(value) = securePrefs.edit().putBoolean(KEY_CONFIRM_PAYMENTS, value).apply()
 
+    var confirmAppInstall: Boolean
+        get() = securePrefs.getBoolean(KEY_CONFIRM_APP_INSTALL, true)
+        set(value) = securePrefs.edit().putBoolean(KEY_CONFIRM_APP_INSTALL, value).apply()
+
     var confirmDeletions: Boolean
         get() = securePrefs.getBoolean(KEY_CONFIRM_DELETIONS, true)
         set(value) = securePrefs.edit().putBoolean(KEY_CONFIRM_DELETIONS, value).apply()
@@ -172,6 +176,7 @@ class SecurePreferences(context: Context) {
         private const val KEY_CONFIRM_MESSAGES = "confirm_messages"
         private const val KEY_CONFIRM_CALLS = "confirm_calls"
         private const val KEY_CONFIRM_PAYMENTS = "confirm_payments"
+        private const val KEY_CONFIRM_APP_INSTALL = "confirm_app_install"
         private const val KEY_CONFIRM_DELETIONS = "confirm_deletions"
         private const val KEY_CONFIRM_SYSTEM = "confirm_system"
         private const val KEY_CONFIRM_PERMISSIONS = "confirm_permissions"

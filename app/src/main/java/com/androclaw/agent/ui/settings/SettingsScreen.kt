@@ -196,6 +196,7 @@ fun SettingsScreen(
                 SwitchSettingRow("Send Messages", "SMS, email, chat", state.confirmMessages, viewModel::updateConfirmMessages)
                 SwitchSettingRow("Make Calls", "Phone and video calls", state.confirmCalls, viewModel::updateConfirmCalls)
                 SwitchSettingRow("Payments", "Payment and banking apps", state.confirmPayments, viewModel::updateConfirmPayments)
+                SwitchSettingRow("Install Apps", "Install, update, or download apps", state.confirmAppInstall, viewModel::updateConfirmAppInstall)
                 SwitchSettingRow("Delete Data", "Delete, clear, erase actions", state.confirmDeletions, viewModel::updateConfirmDeletions)
                 SwitchSettingRow("System Settings", "Changing device settings", state.confirmSystemSettings, viewModel::updateConfirmSystemSettings)
                 SwitchSettingRow("Grant Permissions", "Allowing app permissions", state.confirmPermissions, viewModel::updateConfirmPermissions)

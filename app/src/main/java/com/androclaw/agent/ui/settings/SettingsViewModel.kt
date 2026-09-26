@@ -24,6 +24,7 @@ data class SettingsUiState(
     val confirmMessages: Boolean = true,
     val confirmCalls: Boolean = true,
     val confirmPayments: Boolean = true,
+    val confirmAppInstall: Boolean = true,
     val confirmDeletions: Boolean = true,
     val confirmSystemSettings: Boolean = true,
     val confirmPermissions: Boolean = true,
@@ -63,6 +64,7 @@ class SettingsViewModel : ViewModel() {
             confirmMessages = p.confirmMessages,
             confirmCalls = p.confirmCalls,
             confirmPayments = p.confirmPayments,
+            confirmAppInstall = p.confirmAppInstall,
             confirmDeletions = p.confirmDeletions,
             confirmSystemSettings = p.confirmSystemSettings,
             confirmPermissions = p.confirmPermissions,
@@ -95,6 +97,7 @@ class SettingsViewModel : ViewModel() {
         p.confirmMessages = s.confirmMessages
         p.confirmCalls = s.confirmCalls
         p.confirmPayments = s.confirmPayments
+        p.confirmAppInstall = s.confirmAppInstall
         p.confirmDeletions = s.confirmDeletions
         p.confirmSystemSettings = s.confirmSystemSettings
         p.confirmPermissions = s.confirmPermissions
@@ -130,6 +133,7 @@ class SettingsViewModel : ViewModel() {
     fun updateConfirmMessages(v: Boolean) { _uiState.value = _uiState.value.copy(confirmMessages = v) }
     fun updateConfirmCalls(v: Boolean) { _uiState.value = _uiState.value.copy(confirmCalls = v) }
     fun updateConfirmPayments(v: Boolean) { _uiState.value = _uiState.value.copy(confirmPayments = v) }
+    fun updateConfirmAppInstall(v: Boolean) { _uiState.value = _uiState.value.copy(confirmAppInstall = v) }
     fun updateConfirmDeletions(v: Boolean) { _uiState.value = _uiState.value.copy(confirmDeletions = v) }
     fun updateConfirmSystemSettings(v: Boolean) { _uiState.value = _uiState.value.copy(confirmSystemSettings = v) }
     fun updateConfirmPermissions(v: Boolean) { _uiState.value = _uiState.value.copy(confirmPermissions = v) }

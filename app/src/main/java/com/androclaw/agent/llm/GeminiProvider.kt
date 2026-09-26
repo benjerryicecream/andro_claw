@@ -29,51 +29,22 @@ class GeminiProvider(
 
     private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
 
-    @Serializable
-    private data class GeminiRequest(
-        val contents: List<GeminiContent>,
-        @SerialName("generationConfig") val generationConfig: GenerationConfig,
-        @SerialName("systemInstruction") val systemInstruction: GeminiContent? = null
-    )
-
-    @Serializable
-    private data class GeminiContent(
-        val role: String = "user",
-        val parts: List<GeminiPart>
-    )
-
-    @Serializable
-    private data class GeminiPart(val text: String)
-
-    @Serializable
-    private data class GenerationConfig(
-        val temperature: Float,
-        @SerialName("maxOutputTokens") val maxOutputTokens: Int
-    )
-
-    @Serializable
-    private data class GeminiResponse(
-        val candidates: List<GeminiCandidate> = emptyList(),
-        @SerialName("usageMetadata") val usageMetadata: GeminiUsage? = null
-    )
-
-    @Serializable
-    private data class GeminiCandidate(
-        val content: GeminiContent? = null,
-        @SerialName("finishReason") val finishReason: String? = null
-    )
-
-    @Serializable
-    private data class GeminiUsage(
-        @SerialName("promptTokenCount") val promptTokenCount: Int = 0,
-        @SerialName("candidatesTokenCount") val candidatesTokenCount: Int = 0
-    )
-
-    override suspend fun complete(
+    /**
+     * Gemini native structured output: pins responseMimeType=application/json so
+     * the model is constrained to emit exactly one JSON object (no fences, no prose).
+     */
+    override suspend fun completeJson(
         messages: List<LlmMessage>,
         temperature: Float,
         maxTokens: Int
-    ): LlmResponse = withContext(Dispatchers.IO) {
+    ): LlmResponse = runStructured(messages, temperature, maxTokens, responseMimeType = "application/json")
+
+    private suspend fun runStructured(
+        messages: List<LlmMessage>,
+        temperature: Float,
+        maxTokens: Int,
+        responseMimeType: String? = null
+    ) = withContext(Dispatchers.IO) {
         try {
             val systemMsg = messages.firstOrNull { it.role == "system" }
             val conversationMsgs = messages.filter { it.role != "system" }
@@ -91,7 +62,7 @@ class GeminiProvider(
 
             val requestBody = GeminiRequest(
                 contents = contents,
-                generationConfig = GenerationConfig(temperature, maxTokens),
+                generationConfig = GenerationConfig(temperature, maxTokens, responseMimeType),
                 systemInstruction = systemInstruction
             )
 
@@ -122,4 +93,51 @@ class GeminiProvider(
             LlmResponse.Error("Unexpected error: ${e.message}", e)
         }
     }
+
+    override suspend fun complete(
+        messages: List<LlmMessage>,
+        temperature: Float,
+        maxTokens: Int
+    ): LlmResponse = runStructured(messages, temperature, maxTokens, responseMimeType = null)
+
+    @Serializable
+    private data class GeminiRequest(
+        val contents: List<GeminiContent>,
+        @SerialName("generationConfig") val generationConfig: GenerationConfig,
+        @SerialName("systemInstruction") val systemInstruction: GeminiContent? = null
+    )
+
+    @Serializable
+    private data class GeminiContent(
+        val role: String = "user",
+        val parts: List<GeminiPart>
+    )
+
+    @Serializable
+    private data class GeminiPart(val text: String)
+
+    @Serializable
+    private data class GenerationConfig(
+        val temperature: Float,
+        @SerialName("maxOutputTokens") val maxOutputTokens: Int,
+        @SerialName("responseMimeType") val responseMimeType: String? = null
+    )
+
+    @Serializable
+    private data class GeminiResponse(
+        val candidates: List<GeminiCandidate> = emptyList(),
+        @SerialName("usageMetadata") val usageMetadata: GeminiUsage? = null
+    )
+
+    @Serializable
+    private data class GeminiCandidate(
+        val content: GeminiContent? = null,
+        @SerialName("finishReason") val finishReason: String? = null
+    )
+
+    @Serializable
+    private data class GeminiUsage(
+        @SerialName("promptTokenCount") val promptTokenCount: Int = 0,
+        @SerialName("candidatesTokenCount") val candidatesTokenCount: Int = 0
+    )
 }

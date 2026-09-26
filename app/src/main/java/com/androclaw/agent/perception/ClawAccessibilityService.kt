@@ -9,6 +9,7 @@ import android.view.accessibility.AccessibilityWindowInfo
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import java.util.concurrent.TimeUnit
 
 /**
  * The core accessibility service.
@@ -73,6 +74,30 @@ class ClawAccessibilityService : AccessibilityService() {
         super.onDestroy()
         _instance.value = null
         Log.w(TAG, "onDestroy pid=${android.os.Process.myPid()}")
+    }
+
+    /**
+     * Snapshot that can never wedge the agent: if the a11y window query blocks
+     * (stalled binder during a heavy page transition) we give up and return null
+     * rather than hanging the loop forever. Runs on an unbounded helper thread so
+     * a wedged binder call leaks a disposable thread instead of a coroutine pool
+     * worker (the shared pools are tiny on this device and starvation froze runs).
+     */
+    suspend fun safeSnapshot(timeoutMs: Long = 2500L): UiSnapshot? {
+        val future = snapshotPool.submit(java.util.concurrent.Callable<UiSnapshot> { buildSnapshot() })
+        return try {
+            future.get(timeoutMs, TimeUnit.MILLISECONDS)
+        } catch (e: java.util.concurrent.TimeoutException) {
+            Log.w(TAG, "safeSnapshot: window query stalled >${timeoutMs}ms; proceeding without snapshot")
+            null
+        } catch (e: Exception) {
+            Log.w(TAG, "safeSnapshot failed: ${e.message}")
+            null
+        }
+    }
+
+    private val snapshotPool = java.util.concurrent.Executors.newCachedThreadPool { r ->
+        Thread(r, "snapshot-deadline").apply { isDaemon = true }
     }
 
     /**

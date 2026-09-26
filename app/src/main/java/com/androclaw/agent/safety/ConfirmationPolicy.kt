@@ -10,6 +10,7 @@ enum class SensitiveCategory(val displayName: String, val description: String) {
     SEND_MESSAGE("Send Message", "Sending SMS, chat messages, emails"),
     MAKE_CALL("Make Call", "Initiating phone or video calls"),
     PAYMENT("Payment", "Purchases, transfers, payment apps"),
+    APP_INSTALL("App Install", "Installing, updating, or downloading apps"),
     DELETION("Deletion", "Deleting files, messages, contacts, data"),
     SYSTEM_SETTINGS("System Settings", "Changing device settings, toggling system toggles"),
     PERMISSION_GRANT("Permission Grant", "Granting app permissions"),
@@ -41,6 +42,10 @@ class ConfirmationPolicy(private val prefs: SecurePreferences) {
             // Payment apps
             prefs.confirmPayments && isPaymentAction(label, pkg) ->
                 SensitiveCategory.PAYMENT
+
+            // App install / download / update
+            prefs.confirmAppInstall && isInstallAction(label, pkg) ->
+                SensitiveCategory.APP_INSTALL
 
             // Delete / remove / clear
             prefs.confirmDeletions && isDeletionAction(label) ->
@@ -85,6 +90,15 @@ class ConfirmationPolicy(private val prefs: SecurePreferences) {
                 pkg in paymentPkgs
     }
 
+    private fun isInstallAction(label: String, pkg: String): Boolean {
+        if (pkg in INSTALLER_PKGS) return true
+        if (label in INSTALL_LABELS) return true
+        // Softer match: an app-shaped label that also asks to install/download/update/get.
+        return label.contains("app") &&
+            (label.contains("install") || label.contains("download") ||
+                label.contains("update") || label.contains("get"))
+    }
+
     private fun isDeletionAction(label: String): Boolean {
         return label in listOf("delete", "remove", "clear", "erase", "discard", "trash",
             "delete all", "clear all", "factory reset")
@@ -99,6 +113,20 @@ class ConfirmationPolicy(private val prefs: SecurePreferences) {
         return label in listOf(
             "allow", "allow always", "allow only while using the app",
             "while using the app", "only this time", "grant"
+        )
+    }
+
+    companion object {
+        private val INSTALL_LABELS = setOf(
+            "install", "install now", "install app", "update", "update now",
+            "download", "download now", "get", "get app", "get it",
+            "accept & download", "accept and download", "install from unknown sources"
+        )
+        private val INSTALLER_PKGS = setOf(
+            "com.android.packageinstaller",
+            "com.google.android.packageinstaller",
+            "com.samsung.android.packageinstaller",
+            "com.google.android.permissioncontroller"
         )
     }
 }

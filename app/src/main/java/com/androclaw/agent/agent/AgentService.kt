@@ -389,7 +389,10 @@ class AgentService : Service() {
                 nm.notify(NOTIFICATION_ID, buildNotification("Planning: ${state.goal.take(40)}"))
             }
             is AgentState.Executing -> {
-                nm.notify(NOTIFICATION_ID, buildNotification("Running: ${state.goal.take(40)}…"))
+                nm.notify(
+                    NOTIFICATION_ID,
+                    buildNotification("Running (step ${state.currentStep + 1}/${state.maxSteps}) — ${state.goal.take(40)}…")
+                )
             }
             is AgentState.Completed -> {
                 nm.notify(NOTIFICATION_ID, buildNotification("Done ✓ ${(state.summary.ifBlank { state.goal }).take(40)}"))

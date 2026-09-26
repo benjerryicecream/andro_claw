@@ -17,6 +17,18 @@ interface LlmProvider {
         maxTokens: Int = 1024
     ): LlmResponse
 
+    /**
+     * Structured-output (JSON) completion. Providers that support native JSON
+     * mode (e.g. Gemini responseMimeType=application/json) override this; the
+     * default returns the plain text response, so callers must be prepared to
+     * parse JSON out of free text when a provider lacks a dedicated mode.
+     */
+    suspend fun completeJson(
+        messages: List<LlmMessage>,
+        temperature: Float = 0.0f,
+        maxTokens: Int = 1024
+    ): LlmResponse = complete(messages, temperature, maxTokens)
+
     /** Provider display name */
     val displayName: String
 
